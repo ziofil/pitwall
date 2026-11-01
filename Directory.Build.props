@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project>
   <PropertyGroup>
-    <Authors>Aman Dhoot</Authors>
-    <Company>Undercut F1</Company>
-    <Product>Undercut F1</Product>
+    <Authors>Aman Dhoot;Filippo Miatto</Authors>
+    <Company>Pitwall</Company>
+    <Product>Pitwall</Product>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

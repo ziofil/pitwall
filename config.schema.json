@@ -1,5 +1,5 @@
 {
-  "description": "Options specific to the console app part of UndercutF1.",
+  "description": "Options specific to the console app part of Pitwall.",
   "type": "object",
   "properties": {
     "dataDirectory": {
@@ -38,7 +38,7 @@
     },
     "preventDisplaySleep": {
       "type": "boolean",
-      "description": "Whwther the app should try to prevent the display from turning off/sleeping whilst running.\nThis is similar to running \u003Cc\u003Ecaffeinate -d undercutf1\u003C/c\u003E on macOS."
+      "description": "Whwther the app should try to prevent the display from turning off/sleeping whilst running.\nThis is similar to running \u003Cc\u003Ecaffeinate -d pitwall\u003C/c\u003E on macOS."
     },
     "enablePositionSmoothing": {
       "type": "boolean",
@@ -56,7 +56,7 @@
           "description": "Whether the player sync is enabled or not."
         },
         "serviceType": {
-          "description": "What the external service we\u0027re syncing against is.\nThis determines what API calls undercutf1 will be making, and how it will make them.",
+          "description": "What the external service we\u0027re syncing against is.\nThis determines what API calls pitwall will be making, and how it will make them.",
           "enum": [
             "Kodi"
           ]

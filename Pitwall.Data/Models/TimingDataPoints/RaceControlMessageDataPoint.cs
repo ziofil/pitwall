@@ -1,0 +1,24 @@
+namespace Pitwall.Data;
+
+/// <summary>
+/// Sample: {"Messages": {"2": {"Utc": "2021-03-27T12:00:00", "Category": "Flag", "Flag": "GREEN", "Scope": "Track", "Message": "GREEN LIGHT - PIT EXIT OPEN"}}}
+/// </summary>
+[Mergeable]
+public sealed partial record RaceControlMessageDataPoint : ILiveTimingDataPoint
+{
+    /// <inheritdoc />
+    public LiveTimingDataType LiveTimingDataType => LiveTimingDataType.RaceControlMessages;
+
+    public Dictionary<string, RaceControlMessage> Messages { get; set; } = new();
+
+    public sealed partial record RaceControlMessage
+    {
+        public DateTimeOffset Utc { get; set; }
+        public string? Message { get; set; }
+        public string? Category { get; set; }
+        public int? Lap { get; set; }
+        public string? Flag { get; set; }
+        public string? Scope { get; set; }
+        public string? RacingNumber { get; set; }
+    }
+}

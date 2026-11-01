@@ -71,7 +71,7 @@ jobs:
         run: dotnet restore
 
       - name: Create ${{ matrix.target }} Package
-        run: dotnet publish -r ${{ matrix.target }} -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:IncludeAllContentForSelfExtract=true -p:PublicRelease=true UndercutF1.Console/UndercutF1.Console.csproj -o ${{ matrix.target }}-output
+        run: dotnet publish -r ${{ matrix.target }} -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:IncludeAllContentForSelfExtract=true -p:PublicRelease=true Pitwall.Console/Pitwall.Console.csproj -o ${{ matrix.target }}-output
 
       - name: Download codesign certificate
         if: ${{ contains(matrix.target, 'osx') && github.event_name == 'release' }}
@@ -84,7 +84,7 @@ jobs:
         uses: indygreg/apple-code-sign-action@v1
         if: ${{ contains(matrix.target, 'osx') && github.event_name == 'release' }}
         with:
-          input_path: ${{ matrix.target }}-output/undercutf1
+          input_path: ${{ matrix.target }}-output/pitwall
           p12_file: certificate.p12
           p12_password: ${{ secrets.MAC_CODESIGN_PASSWORD }}
 
@@ -93,16 +93,16 @@ jobs:
         if: ${{ github.event_name == 'release'}}
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: ${{ matrix.target }}-output/${{ contains(matrix.target, 'win') && 'undercutf1.exe' || 'undercutf1'}}
-          asset_name: undercutf1-${{ matrix.target }}${{ contains(matrix.target, 'win') && '.exe' || ''}}
+          file: ${{ matrix.target }}-output/${{ contains(matrix.target, 'win') && 'pitwall.exe' || 'pitwall'}}
+          asset_name: pitwall-${{ matrix.target }}${{ contains(matrix.target, 'win') && '.exe' || ''}}
           tag: ${{ github.ref }}
 
       - name: Upload ${{ matrix.target }} to Pull Request
         uses: actions/upload-artifact@v7
         if: ${{ github.event_name == 'pull_request'}}
         with:
-          name: undercutf1-${{ matrix.target }}${{ contains(matrix.target, 'win') && '.exe' || ''}}
-          path: ${{ matrix.target }}-output/${{ contains(matrix.target, 'win') && 'undercutf1.exe' || 'undercutf1'}}
+          name: pitwall-${{ matrix.target }}${{ contains(matrix.target, 'win') && '.exe' || ''}}
+          path: ${{ matrix.target }}-output/${{ contains(matrix.target, 'win') && 'pitwall.exe' || 'pitwall'}}
           overwrite: true
 
   build-docker-image:
@@ -144,7 +144,7 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: justaman62/undercutf1:latest,justaman62/undercutf1:${{ steps.nbgv.outputs.SemVer2 }}
+          tags: ziofil/pitwall:latest,ziofil/pitwall:${{ steps.nbgv.outputs.SemVer2 }}
 
       - name: Build and push
         if: ${{ github.event_name == 'pull_request' }}
@@ -154,4 +154,4 @@ jobs:
           platforms: linux/amd64,linux/arm64
           # Don't push dependabot builds to Dockerhub
           push: ${{ github.actor != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository }}
-          tags: justaman62/undercutf1:${{ steps.nbgv.outputs.SemVer2 }}
+          tags: ziofil/pitwall:${{ steps.nbgv.outputs.SemVer2 }}

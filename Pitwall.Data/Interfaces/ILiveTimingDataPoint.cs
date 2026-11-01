@@ -1,0 +1,9 @@
+namespace Pitwall.Data;
+
+public interface ILiveTimingDataPoint
+{
+    /// <summary>
+    /// The <see cref="LiveTimingDataType"/> for this data point.
+    /// </summary>
+    LiveTimingDataType LiveTimingDataType { get; }
+}

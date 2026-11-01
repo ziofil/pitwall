@@ -1,0 +1,119 @@
+namespace Pitwall.Data;
+
+/// <summary>
+/// Options to configure the behaviour of live timing.
+/// </summary>
+public record LiveTimingOptions
+{
+    /// <summary>
+    /// The directory to read and store live timing data for simulations.
+    /// When live sessions are being listened to, all data received will be recorded in this directory.
+    /// This is also the directory that imported data is saved to.
+    ///
+    /// Defaults to <c>%LOCALAPPDATA%/pitwall/data</c> on Windows,
+    /// <c>$XDG_DATA_HOME/pitwall/data</c> or <c>~/.local/share</c> on Mac/Linux.
+    /// </summary>
+    public string DataDirectory { get; set; } = GetDefaultDataDirectory();
+
+    /// <summary>
+    /// The directory where logs will be output to.
+    /// Defaults to <c>~/pitwall/logs</c>
+    /// </summary>
+    public string LogDirectory { get; set; } = GetDefaultLogDirectory();
+
+    /// <summary>
+    /// Whether the app should expose an API at http://localhost:61937.
+    /// Defaults to <c>false</c>.
+    /// </summary>
+    public bool ApiEnabled { get; set; } = false;
+
+    /// <summary>
+    /// Whether verbose logging should be enabled.
+    /// Defaults to <c>false</c>.
+    /// </summary>
+    public bool Verbose { get; set; } = false;
+
+    /// <summary>
+    /// Whether notifications should be sent to the user when new Race Control messages are received.
+    /// Blue flag related messages do not result in notifications, but all other messages do.
+    /// Pitwall.Console implements these notifications as <c>BEL</c>s sent to your terminal, resulting in an audible beep.
+    /// </summary>
+    public bool Notify { get; set; } = true;
+
+    /// <summary>
+    /// The access token that is used in the connection to the SignalR Live Timing service.
+    /// Providing this token allows you to access additional live timing feeds which may be used in some
+    /// features of pitwall.
+    /// </summary>
+    public string? Formula1AccessToken { get; set; }
+
+    /// <summary>
+    /// Try to conform to Windows/XDG directory standards by default.
+    /// <see cref="Environment.SpecialFolder.LocalApplicationData"/> will return <c>%LOCALAPPDATA%</c> on Windows.
+    /// On Linux/Mac, we will try to use <c>$XDG_DATA_HOME</c> or <c>~/.local/share</c>.
+    /// </summary>
+    private static string GetDefaultDataDirectory()
+    {
+        // NOTE: Environment.SpecialFolder.LocalApplicationData returns ~/Library/Application Support on Mac,
+        // so using the environment variables directly on Mac/Linux to keep them both using XDG standards.
+        if (OperatingSystem.IsWindows())
+        {
+            return Path.Join(
+                Environment.GetFolderPath(
+                    Environment.SpecialFolder.LocalApplicationData,
+                    Environment.SpecialFolderOption.Create
+                ),
+                "pitwall",
+                "data"
+            );
+        }
+        else
+        {
+            var xdgDataDirectory = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+            if (string.IsNullOrWhiteSpace(xdgDataDirectory))
+            {
+                xdgDataDirectory = Path.Join(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".local",
+                    "share"
+                );
+            }
+
+            return Path.Join(xdgDataDirectory, "pitwall", "data");
+        }
+    }
+
+    /// <summary>
+    /// Try to conform to Windows/XDG directory standards by default.
+    /// <see cref="Environment.SpecialFolder.LocalApplicationData"/> will return <c>%LOCALAPPDATA%</c> on Windows.
+    /// On Linux/Mac, we will try to use <c>$XDG_STATE_HOME</c> or <c>~/.local/state</c>
+    /// </summary>
+    private static string GetDefaultLogDirectory()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return Path.Join(
+                Environment.GetFolderPath(
+                    Environment.SpecialFolder.LocalApplicationData,
+                    Environment.SpecialFolderOption.Create
+                ),
+                "pitwall",
+                "logs"
+            );
+        }
+        else
+        {
+            var xdgStateDirectory = Environment.GetEnvironmentVariable("XDG_STATE_HOME");
+            if (string.IsNullOrWhiteSpace(xdgStateDirectory))
+            {
+                xdgStateDirectory = Path.Join(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".local",
+                    "state"
+                );
+            }
+
+            return Path.Join(xdgStateDirectory, "pitwall", "logs");
+        }
+    }
+}

@@ -1,12 +1,16 @@
 <!-- omit in toc -->
-# undercut-f1
+# Pitwall
 
-undercut-f1 is an open source F1 Live Timing client.
+Pitwall is an open source F1 Live Timing client.
 
-`undercutf1` is a TUI application which uses `UndercutF1.Data` to show a Live Timing screen during sessions, and records the data for future session replays.
+> [!NOTE]
+> Pitwall is a fork of [undercut-f1](https://github.com/JustAman62/undercut-f1) by Aman Dhoot, modified by Filippo Miatto.
+> It is distributed under the same [GPL-3.0 license](LICENSE). See [Notice](#notice) for details.
+
+`pitwall` is a TUI application which uses `Pitwall.Data` to show a Live Timing screen during sessions, and records the data for future session replays.
 F1 live broadcasts are usually delayed by some indeterminable amount (usually 30-60 seconds), so the TUI allows you to delay the data being displayed so that you can match up what you see on your screen to what you see on your TV.
 
-The `UndercutF1.Data` library is provided to facilitate connectivity with the F1 Live Timing data stream, and handle all the processing of the incoming data. It also allows for "simulated" streams, where previously recorded data streams can be played back to allow for easy development/testing.
+The `Pitwall.Data` library is provided to facilitate connectivity with the F1 Live Timing data stream, and handle all the processing of the incoming data. It also allows for "simulated" streams, where previously recorded data streams can be played back to allow for easy development/testing.
 
 Feature Highlights:
 
@@ -36,15 +40,15 @@ Feature Highlights:
 > - Team/Drivers championship tables
 > - Pit Stop times (in box and in pitlane)
 >
-> Importing a session after it finishes still fetches all the data, so all functionality is available if you use undercut-f1 after a race finishes.
+> Importing a session after it finishes still fetches all the data, so all functionality is available if you use pitwall after a race finishes.
 >
-> Linking your F1 TV account with undercut-f1 is as simple as running `undercutf1 login` before starting your session, and following the instructions displayed. See [F1 TV Account Login](#f1-tv-account-login) for details.
+> Linking your F1 TV account with pitwall is as simple as running `pitwall login` before starting your session, and following the instructions displayed. See [F1 TV Account Login](#f1-tv-account-login) for details.
 
 <!-- omit in toc -->
 ## Table of Contents
 
 - [Inspiration](#inspiration)
-- [UndercutF1 in Action](#undercutf1-in-action)
+- [Pitwall in Action](#pitwall-in-action)
   - [Timing Tower during a Race](#timing-tower-during-a-race)
   - [Using a Cursor to Display Relative Gap for a Specific Driver](#using-a-cursor-to-display-relative-gap-for-a-specific-driver)
   - [Track Gaps between Two Drivers Over Time](#track-gaps-between-two-drivers-over-time)
@@ -54,11 +58,10 @@ Feature Highlights:
   - [Tyre Stint / Strategy](#tyre-stint--strategy)
   - [Using a Cursor to View Timing History by Lap](#using-a-cursor-to-view-timing-history-by-lap)
   - [Listen to and Transcribe Team Radio](#listen-to-and-transcribe-team-radio)
-- [Getting Started with `undercutf1`](#getting-started-with-undercutf1)
+- [Getting Started with `pitwall`](#getting-started-with-pitwall)
   - [Installation](#installation)
     - [Prerequisites](#prerequisites)
     - [Install and run as a dotnet tool](#install-and-run-as-a-dotnet-tool)
-    - [Install from Homebrew](#install-from-homebrew)
     - [Install and run the standalone executable](#install-and-run-the-standalone-executable)
     - [Run using the docker image](#run-using-the-docker-image)
       - [Known Issues with Docker](#known-issues-with-docker)
@@ -85,7 +88,7 @@ Feature Highlights:
 
 This project is heavily inspired by the [FastF1 project by theOehrly](https://github.com/theOehrly/Fast-F1). They did a lot of the work understanding the SignalR stream coming from the F1 Live Timing service. Visit their project if you'd like to do any sort of data analysis on past F1 events, or gather live timing data using their module.
 
-## UndercutF1 in Action
+## Pitwall in Action
 
 ### Timing Tower during a Race
 
@@ -130,17 +133,17 @@ The `Driver Tracker` page shows a track map overlaid with selected drivers. Use 
 ![Driver Tracker Page](docs/screenshots/driver-tracker.png)
 
 > [!NOTE]
-> The Driver Tracker and Timing History charts work using terminal graphics protocols. UndercutF1 supports three protocols:
+> The Driver Tracker and Timing History charts work using terminal graphics protocols. Pitwall supports three protocols:
 >
 > - [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/)
 > - [iTerm2 Inline Image Protocol](https://iterm2.com/documentation-images.html)
 > - [Sixel](https://www.vt100.net/docs/vt3xx-gp/chapter14.html)
 >
-> Between these three protocols, UndercutF1 should support a wide variety of terminals.
+> Between these three protocols, Pitwall should support a wide variety of terminals.
 > I personally try to test on iTerm2, Ghostty, WezTerm, and Kitty.
 > Windows Terminal should be supported via Sixel, but is rarely tested.
 >
-> Run `undercutf1 info` to see if UndercutF1 detects graphics protocol support in your terminal.
+> Run `pitwall info` to see if Pitwall detects graphics protocol support in your terminal.
 >
 > If the terminal you use doesn't show the graphics, please raise an issue and I'll try to implement support!
 
@@ -172,13 +175,17 @@ See [Prerequisites](#prerequisites) to ensure you are able to playback audio.
 
 ![Listen to and Transcribe Team Radio](docs/screenshots/team-radio.png)
 
-## Getting Started with `undercutf1`
+## Getting Started with `pitwall`
 
 ### Installation
 
+> [!IMPORTANT]
+> Pitwall has not been published to NuGet or Docker Hub yet, so the `dotnet tool` and Docker instructions below won't work until it is.
+> For now, [run it directly from source](#run-directly-from-source) or download an executable from a GitHub release.
+
 #### Prerequisites
 
-UndercutF1 tries to statically link as many dependencies as possible to make installation and usage easy.
+Pitwall tries to statically link as many dependencies as possible to make installation and usage easy.
 There are however some utilities that may need to be installed for some functionality:
 
 - Team Radio audio playback uses platform-specific command-line executables to play audio files.
@@ -199,43 +206,28 @@ There are however some utilities that may need to be installed for some function
 
 #### Install and run as a dotnet tool
 
-`undercutf1` is available as a `dotnet` tool from NuGet, which means it can be installed system-wide simply by running:
+`pitwall` is available as a `dotnet` tool from NuGet, which means it can be installed system-wide simply by running:
 
 ```sh
 # Install globally using the -g flag
-dotnet tool install -g undercutf1
+dotnet tool install -g pitwall
 
-# Assuming the dotnet tools directory is on your path, simply execute undercutf1
-undercutf1
+# Assuming the dotnet tools directory is on your path, simply execute pitwall
+pitwall
 ```
 
-This method is recommended as it is easy to keep the app updated using `dotnet tool update -g undercutf1`. You'll need the .NET 9 SDK installed to use this installation method. If you'd rather not install the SDK, try the [standalone installation option below](#install-and-run-the-standalone-executable).
-
-#### Install from Homebrew
-
-`undercutf1` is available as a formula from `brew` which means it can be installed system-wide (on Mac and Linux) simply by running:
-
-```sh
-brew install undercutf1
-
-# Execute undercutf1 to start the TUI
-undercutf1
-```
-
-This method is recommended as it is easy to keep the app updated using `brew upgrade`. Note that installing using `brew` will also install the `dotnet` formula. If you develop on your machine using the dotnet-sdk, and have the sdk installed through a non-brew method (e.g. directly from MS or via VSCode), I would recommend avoiding this installation method as the brew `dotnet` installation can conflict with your own installation due to differences in how `dotnet` is signed via brew. Alternatively, you can install the `dotnet` cask (which is signed correctly) `brew install --cash dotnet-sdk`, and then install `undercutf1`. This way, your system will still have a signed version of the SDK on its `$PATH`.
-
-The brew installation method will also install all the mentioned [prerequisites](#prerequisites) for you.
+This method is recommended as it is easy to keep the app updated using `dotnet tool update -g pitwall`. You'll need the .NET 9 SDK installed to use this installation method. If you'd rather not install the SDK, try the [standalone installation option below](#install-and-run-the-standalone-executable).
 
 #### Install and run the standalone executable
 
-Standalone executables are attached to each GitHub release. Download the executable for your system OS/architecture and simply run it directly. The list of artifacts are available on the [release page for the latest release](https://github.com/JustAman62/undercut-f1/releases/latest). These executables are static builds so don't require the `dotnet` runtime to be present.
+Standalone executables are attached to each GitHub release. Download the executable for your system OS/architecture and simply run it directly. The list of artifacts are available on the [release page for the latest release](https://github.com/ziofil/pitwall/releases/latest). These executables are static builds so don't require the `dotnet` runtime to be present.
 
 ```sh
 # Download the latest executable (in this case for osx-arm64)
-curl https://github.com/JustAman62/undercut-f1/releases/latest/download/undercutf1-osx-arm64 -o ./undercutf1 -L
+curl https://github.com/ziofil/pitwall/releases/latest/download/pitwall-osx-arm64 -o ./pitwall -L
 
-# Execute undercutf1 to start the TUI
-./undercutf1
+# Execute pitwall to start the TUI
+./pitwall
 ```
 
 #### Run using the docker image
@@ -250,11 +242,11 @@ If you are using Wezterm or iTerm as your terminal, you'll need to pass through 
 to make sure that your terminal graphics work correctly (e.g. driver tracker).
 
 ```sh
-docker run -it -e TERM_PROGRAM -v $HOME/undercut-f1/data:/data justaman62/undercutf1
+docker run -it -e TERM_PROGRAM -v $HOME/pitwall/data:/data ziofil/pitwall
 
 # Arguments can still be passed to the executable as normal
 # for example:
-docker run -it -v $HOME/undercut-f1/data:/data justaman62/undercutf1 import 2025
+docker run -it -v $HOME/pitwall/data:/data ziofil/pitwall import 2025
 ```
 
 ##### Known Issues with Docker
@@ -265,19 +257,19 @@ docker run -it -v $HOME/undercut-f1/data:/data justaman62/undercutf1 import 2025
 
 ```sh
 # Checkout the git repository
-git clone git@github.com:JustAman62/undercut-f1.git
-cd undercut-f1
+git clone git@github.com:ziofil/pitwall.git
+cd pitwall
 
 # Run the console project with `dotnet run`
-dotnet run --project UndercutF1.Console/UndercutF1.Console.csproj
+dotnet run --project Pitwall.Console/Pitwall.Console.csproj
 
 # Arguments can be provided after the -- argument, for example
-dotnet run --project UndercutF1.Console/UndercutF1.Console.csproj -- import 2025
+dotnet run --project Pitwall.Console/Pitwall.Console.csproj -- import 2025
 ```
 
 ### Start Timing for a Live Session
 
-1. Start `undercutf1` as described above
+1. Start `pitwall` as described above
 2. Navigate to the <kbd>S</kbd> `Session` Screen
 3. Start a Live Session with the <kbd>L</kbd> `Start Live Session` action
 
@@ -291,10 +283,10 @@ Data for pre-recorded sessions should be stored in the `<data-directory>/<sessio
 
     ```sh
     # Import data from the 2025 race in Suzuka
-    undercutf1 import 2025 --meeting-key 1256 --session-key 10006
+    pitwall import 2025 --meeting-key 1256 --session-key 10006
     ```
 
-2. Start `undercutf1` as described [above](#installation)
+2. Start `pitwall` as described [above](#installation)
 3. Navigate to the <kbd>S</kbd> `Session` Screen
 4. Start a Simulated Session with the <kbd>F</kbd> `Start Simulation` action.
 5. Select the session to start using the Up/Down arrows, then pressing <kbd>Enter</kbd>
@@ -302,22 +294,22 @@ Data for pre-recorded sessions should be stored in the `<data-directory>/<sessio
 
 ### Download a previous session data for replay
 
-F1 provides static timing data files for already completed sessions. This data can be downloaded and converted into the same format `undercutf1` uses to save live recorded data. You can then replay the old session using the steps above.
+F1 provides static timing data files for already completed sessions. This data can be downloaded and converted into the same format `pitwall` uses to save live recorded data. You can then replay the old session using the steps above.
 
-1. List the meetings that have data available to import with `undercutf1 import <year>`
-2. Review the list of meetings returned from the command, and list the available sessions inside the chosen meeting with `undercutf1 import <year> --meeting-key <meeting-key>`
-3. Review the list of sessions, and select one to import: `undercutf1 import <year> --meeting-key <meeting-key> --session-key <session-key>`
+1. List the meetings that have data available to import with `pitwall import <year>`
+2. Review the list of meetings returned from the command, and list the available sessions inside the chosen meeting with `pitwall import <year> --meeting-key <meeting-key>`
+3. Review the list of sessions, and select one to import: `pitwall import <year> --meeting-key <meeting-key> --session-key <session-key>`
 4. Data that is imported will be saved to the configured data directory. See [Configuration](#configuration) for information on how to change this.
 
 ### During the Session
 
 #### Managing Delay
 
-All session data, whether live or pre-recorded, is sent to a `Channel` that acts as a delayed-queue. After your currently configured delay, data points are pulled from the queue and processed, leading to updates on the timing screens. The amount of this delay can be changed with the <kbd>M</kbd>/<kbd>N</kbd> `Delay` actions whilst on the timing screens. Hold <kbd>⇧ Shift</kbd> to change the delay by 30 seconds instead of 5. Use the <kbd>,</kbd>/<kbd>.</kbd> keys to change by 1 second. When using `undercutf1` during a live session, you may wish to increase this delay to around ~50 seconds (actual number may vary) to match with the broadcast delay and avoid being spoiled about upcoming action.
+All session data, whether live or pre-recorded, is sent to a `Channel` that acts as a delayed-queue. After your currently configured delay, data points are pulled from the queue and processed, leading to updates on the timing screens. The amount of this delay can be changed with the <kbd>M</kbd>/<kbd>N</kbd> `Delay` actions whilst on the timing screens. Hold <kbd>⇧ Shift</kbd> to change the delay by 30 seconds instead of 5. Use the <kbd>,</kbd>/<kbd>.</kbd> keys to change by 1 second. When using `pitwall` during a live session, you may wish to increase this delay to around ~50 seconds (actual number may vary) to match with the broadcast delay and avoid being spoiled about upcoming action.
 
 Simulated sessions start with a calculated delay equal to the amount of time between the start of the actual session and now. This means you can decrease the delay with the <kbd>N</kbd> `Delay` action to fast-forward through the session.
 
-Data processing, and therefore the "session clock" can be paused using the <kbd>P</kbd> `Pause Clock` action. This allows you to easily synchronize pre-recorded sessions by pausing the session in UndercutF1, then resuming at the perfect time when, for example, the formation lap starts.
+Data processing, and therefore the "session clock" can be paused using the <kbd>P</kbd> `Pause Clock` action. This allows you to easily synchronize pre-recorded sessions by pausing the session in Pitwall, then resuming at the perfect time when, for example, the formation lap starts.
 
 #### Using the Cursor
 
@@ -325,45 +317,45 @@ There is a global cursor that is controlled with the <kbd>▼</kbd>/<kbd>▲</kb
 
 ## Configuration
 
-UndercutF1 can be configured using either a simple `config.json` file, through the command line at startup, or using environment variables. JSON configuration will be loaded from [the appropriate config file path](#default-directories), if it exists.
+Pitwall can be configured using either a simple `config.json` file, through the command line at startup, or using environment variables. JSON configuration will be loaded from [the appropriate config file path](#default-directories), if it exists.
 
-A JSON Schema file is available in the root of this repository which can help when creating the `config.json` file. Add the JSON `{"$schema": "https://raw.githubusercontent.com/JustAman62/undercut-f1/refs/heads/master/config.schema.json"}"` to your `config.json` to get automatic code complete and validation.
+A JSON Schema file is available in the root of this repository which can help when creating the `config.json` file. Add the JSON `{"$schema": "https://raw.githubusercontent.com/ziofil/pitwall/refs/heads/master/config.schema.json"}"` to your `config.json` to get automatic code complete and validation.
 
 To view what configuration is currently being used, open the <kbd>I</kbd> `Info` screen when the app starts up.
 
 | JSON Path                                     | Command Line                | Environment Variable                                      | Description                                                                                                                                                                                                                             |
 | --------------------------------------------- | --------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dataDirectory`                               | `--data-directory`          | `UNDERCUTF1_DATADIRECTORY`                                | The directory to which JSON timing data is read or written from. This directory is also where Whisper models will be stored (if downloaded) for team radio transcription.                                                               |
-| `logDirectory`                                | `--log-directory`           | `UNDERCUTF1_LOGDIRECTORY`                                 | The directory to which logs are written to.                                                                                                                                                                                             |
-| `verbose`                                     | `-v\|--verbose`             | `UNDERCUTF1_VERBOSE`                                      | Whether verbose logging should be enabled. Default: `false`. Values: `true` or `false`.                                                                                                                                                 |
-| `apiEnabled`                                  | `--with-api`                | `UNDERCUTF1_APIENABLED`                                   | Whether the app should expose an API at <http://localhost:61937>. Default: `false`. Values: `true` or `false`.                                                                                                                          |
-| `notify`                                      | `--notify`                  | `UNDERCUTF1_NOTIFY`                                       | Whether the app should sent audible BELs to your terminal when new race control messages are received. Default: `true`. Values: `true` or `false`.                                                                                      |
-| `preferFfmpegPlayback`                        | `--prefer-ffmpeg`           | `UNDERCUTF1_PREFERFFMPEGPLAYBACK`                         | Prefer the usage of `ffplay` for playing Team Radio on Mac/Linux, instead of afplay/mpg123 respectively. `ffplay` is always used on Windows. Default: `false`. Values: `true` or `false`.                                               |
-| `forceGraphicsProtocol`                       | `--force-graphics-protocol` | `UNDERCUTF1_FORCEGRAPHICSPROTOCOL`                        | Forces the usage of a particular graphics protocol instead of using heuristics to find a supported one. Values: `Kitty`, `Sixel`, or `iTerm`.                                                                                           |
-| `preventDisplaySleep`                         | `--prevent-sleep`           | `UNDERCUTF1_PREVENTDISPLAYSLEEP`                          | If enabled, will attempt to prevent the device/display from sleeping whilst the app is running. Intended to help prevent accidental stream disconnection due to inactivity on your device. Default: `false`. Values: `true` or `false`. |
-| `enablePositionSmoothing`                     | N/A                         | `UNDERCUTF1_ENABLEPOSITIONSMOOTHING`                      | Whether car positions on the driver tracker glide between updates by fitting recent samples (the dot lags live slightly), rather than jumping to each raw sample. Default: `false`. Values: `true` or `false`.                          |
-| `formula1AccessToken`                         | N/A                         | `UNDERCUTF1_FORMULA1ACCESSTOKEN`                          | The access token to use when connecting to the F1 Live Timing feed. Only required to see additional data feeds.                                                                                                                         |
-| `externalPlayerSync.enabled`                  | N/A                         | `UNDERCUTF1_EXTERNALPLAYERSYNC__ENABLED`                  | Whether synchronisation of the session clock is enabled. Default: `false`. Values: `true` or `false`.                                                                                                                                   |
-| `externalPlayerSync.url`                      | N/A                         | `UNDERCUTF1_EXTERNALPLAYERSYNC__URL`                      | The URL to use when connecting to the external services websocket. For Kodi, this will be something like `ws://localhost:9090/jsonrpc`.                                                                                                 |
-| `externalPlayerSync.serviceType`              | N/A                         | `UNDERCUTF1_EXTERNALPLAYERSYNC__SERVICETYPE`              | What type of service is behind the provided URL to synchronise with. Values: `Kodi`.                                                                                                                                                    |
-| `externalPlayerSync.webSocketConnectInterval` | N/A                         | `UNDERCUTF1_EXTERNALPLAYERSYNC__WEBSOCKETCONNECTINTERVAL` | If the websocket connection fails or ends, how long to wait before trying again (in ms). Default: `30000`.                                                                                                                              |
+| `dataDirectory`                               | `--data-directory`          | `PITWALL_DATADIRECTORY`                                | The directory to which JSON timing data is read or written from. This directory is also where Whisper models will be stored (if downloaded) for team radio transcription.                                                               |
+| `logDirectory`                                | `--log-directory`           | `PITWALL_LOGDIRECTORY`                                 | The directory to which logs are written to.                                                                                                                                                                                             |
+| `verbose`                                     | `-v\|--verbose`             | `PITWALL_VERBOSE`                                      | Whether verbose logging should be enabled. Default: `false`. Values: `true` or `false`.                                                                                                                                                 |
+| `apiEnabled`                                  | `--with-api`                | `PITWALL_APIENABLED`                                   | Whether the app should expose an API at <http://localhost:61937>. Default: `false`. Values: `true` or `false`.                                                                                                                          |
+| `notify`                                      | `--notify`                  | `PITWALL_NOTIFY`                                       | Whether the app should sent audible BELs to your terminal when new race control messages are received. Default: `true`. Values: `true` or `false`.                                                                                      |
+| `preferFfmpegPlayback`                        | `--prefer-ffmpeg`           | `PITWALL_PREFERFFMPEGPLAYBACK`                         | Prefer the usage of `ffplay` for playing Team Radio on Mac/Linux, instead of afplay/mpg123 respectively. `ffplay` is always used on Windows. Default: `false`. Values: `true` or `false`.                                               |
+| `forceGraphicsProtocol`                       | `--force-graphics-protocol` | `PITWALL_FORCEGRAPHICSPROTOCOL`                        | Forces the usage of a particular graphics protocol instead of using heuristics to find a supported one. Values: `Kitty`, `Sixel`, or `iTerm`.                                                                                           |
+| `preventDisplaySleep`                         | `--prevent-sleep`           | `PITWALL_PREVENTDISPLAYSLEEP`                          | If enabled, will attempt to prevent the device/display from sleeping whilst the app is running. Intended to help prevent accidental stream disconnection due to inactivity on your device. Default: `false`. Values: `true` or `false`. |
+| `enablePositionSmoothing`                     | N/A                         | `PITWALL_ENABLEPOSITIONSMOOTHING`                      | Whether car positions on the driver tracker glide between updates by fitting recent samples (the dot lags live slightly), rather than jumping to each raw sample. Default: `false`. Values: `true` or `false`.                          |
+| `formula1AccessToken`                         | N/A                         | `PITWALL_FORMULA1ACCESSTOKEN`                          | The access token to use when connecting to the F1 Live Timing feed. Only required to see additional data feeds.                                                                                                                         |
+| `externalPlayerSync.enabled`                  | N/A                         | `PITWALL_EXTERNALPLAYERSYNC__ENABLED`                  | Whether synchronisation of the session clock is enabled. Default: `false`. Values: `true` or `false`.                                                                                                                                   |
+| `externalPlayerSync.url`                      | N/A                         | `PITWALL_EXTERNALPLAYERSYNC__URL`                      | The URL to use when connecting to the external services websocket. For Kodi, this will be something like `ws://localhost:9090/jsonrpc`.                                                                                                 |
+| `externalPlayerSync.serviceType`              | N/A                         | `PITWALL_EXTERNALPLAYERSYNC__SERVICETYPE`              | What type of service is behind the provided URL to synchronise with. Values: `Kodi`.                                                                                                                                                    |
+| `externalPlayerSync.webSocketConnectInterval` | N/A                         | `PITWALL_EXTERNALPLAYERSYNC__WEBSOCKETCONNECTINTERVAL` | If the websocket connection fails or ends, how long to wait before trying again (in ms). Default: `30000`.                                                                                                                              |
 
 ### Default Directories
 
-UndercutF1 tries to adhere the Windows and XDG standards as much as possible. By default, timing data and logs are written/read at the following directories:
+Pitwall tries to adhere the Windows and XDG standards as much as possible. By default, timing data and logs are written/read at the following directories:
 
 | Type        | Windows                                | Linux/Mac                                  | Linux/Mac Fallback                  |
 | ----------- | -------------------------------------- | ------------------------------------------ | ----------------------------------- |
-| Config File | `$env:APPDATA/undercut-f1/config.json` | `$XDG_CONFIG_HOME/undercut-f1/config.json` | `~/.config/undercut-f1/config.json` |
-| Data        | `$env:LOCALAPPDATA/undercut-f1/data`   | `$XDG_DATA_HOME/undercut-f1/data`          | `~/.local/share/undercut-f1/data`   |
-| Logs        | `$env:LOCALAPPDATA/undercut-f1/logs`   | `$XDG_STATE_HOME/undercut-f1/logs`         | `~/.local/state/undercut-f1/logs`   |
+| Config File | `$env:APPDATA/pitwall/config.json` | `$XDG_CONFIG_HOME/pitwall/config.json` | `~/.config/pitwall/config.json` |
+| Data        | `$env:LOCALAPPDATA/pitwall/data`   | `$XDG_DATA_HOME/pitwall/data`          | `~/.local/share/pitwall/data`   |
+| Logs        | `$env:LOCALAPPDATA/pitwall/logs`   | `$XDG_STATE_HOME/pitwall/logs`         | `~/.local/state/pitwall/logs`   |
 
 Data and Logs paths can be configured as [described above](#configuration).
 The config file location cannot be modified, and will always be read from the above location.
 
 ### F1 TV Account Login
 
-Since the 2025 Dutch GP, the F1 Live Timing feed no longer freely publishes some of the data we need to provide all functionality in undercut-f1.
+Since the 2025 Dutch GP, the F1 Live Timing feed no longer freely publishes some of the data we need to provide all functionality in pitwall.
 
 The following functionality is now only available to those who have an active F1 TV subscription:
 
@@ -372,37 +364,37 @@ The following functionality is now only available to those who have an active F1
 - Team/Drivers championship tables
 - Pit Stop times (in box and in pitlane)
 
-Importing a session after it finishes still fetches all the data, so all functionality is available if you use undercut-f1 after a race finishes.
+Importing a session after it finishes still fetches all the data, so all functionality is available if you use pitwall after a race finishes.
 
-Linking your F1 TV account with undercut-f1 is as simple as running `undercutf1 login` before starting your session, and following the instructions displayed. undercutf1 will open a WebView on to the F1 website, allowing you to sign in. It will then read the generated access token cookie for you from the WebView, and save it in the undercutf1 config file. This token is usually valid for a week, so you will likely have to perform this action often.
+Linking your F1 TV account with pitwall is as simple as running `pitwall login` before starting your session, and following the instructions displayed. pitwall will open a WebView on to the F1 website, allowing you to sign in. It will then read the generated access token cookie for you from the WebView, and save it in the pitwall config file. This token is usually valid for a week, so you will likely have to perform this action often.
 
 If you've already started a session, you can launch the login window using the <kbd>A</kbd> `Account` screen, then pressing <kbd>L</kbd> `Login`.
 
-The current validity of your access token can be shown by running `undercutf1 info` (or in the Info screen of the TUI). A note will also be displayed on the entrypoint display of the TUI, reminding you to re-login if the current token has expired.
+The current validity of your access token can be shown by running `pitwall info` (or in the Info screen of the TUI). A note will also be displayed on the entrypoint display of the TUI, reminding you to re-login if the current token has expired.
 
-If the `undercutf1 login` command does not work for you, there is a manual process:
+If the `pitwall login` command does not work for you, there is a manual process:
 
 1. In a web browser, navigate to [the Formula 1 Account Login](https://account.formula1.com/#/en/login)
 2. Log in with your account credentials
 3. Open the browsers web inspector/inspect element/dev console
 4. Navigate to the cookie storage section (usually in `Application` or `Storage`)
 5. Copy the value of the `login-session` cookie stored under the `static.formula1.com` or `formula1.com` domain
-6. Paste this string (without modification) in to the undercutf1 config file with the key `"formula1AccessToken"`
+6. Paste this string (without modification) in to the pitwall config file with the key `"formula1AccessToken"`
 
 Example:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/JustAman62/undercut-f1/refs/heads/master/config.schema.json",
+  "$schema": "https://raw.githubusercontent.com/ziofil/pitwall/refs/heads/master/config.schema.json",
   "formula1AccessToken": "%7B%22data%22%3A%7B%22subscriptionToken%22%3A%22eyJ....."
 }
 ```
 
 ## Logging
 
-`UndercutF1.Data` writes logs using the standard `ILogger` implementation. SignalR client logs are also passed to the standard `ILoggerProvider`.
+`Pitwall.Data` writes logs using the standard `ILogger` implementation. SignalR client logs are also passed to the standard `ILoggerProvider`.
 
-When running `undercutf1` logs are available in two places:
+When running `pitwall` logs are available in two places:
 
 - Logs are stored in memory and viewable the <kbd>L</kbd> `Logs` screen. Logs can be scrolled on this screen, and the minimum level of logs shown can be changed with the <kbd>M</kbd> `Minimum Log Level` action.
 - Log files are written to the [configured log directory](#default-directories).
@@ -411,7 +403,7 @@ Default log level is set to `Information`. More verbose logging can be enabled w
 
 ## Alternate Key Binds
 
-`undercutf1` displays the keys associated with each action that is applicable for the current screen.
+`pitwall` displays the keys associated with each action that is applicable for the current screen.
 However, the shown keys aren't the only keys which can trigger the action, there are alternative keys which may be more intuitive for users of other TUIs.
 
 - <kbd>H</kbd>,<kbd>J</kbd>,<kbd>K</kbd>,<kbd>L</kbd> can be used in place of arrow keys.
@@ -430,7 +422,7 @@ Both of these files are required for future simulations/replays. The `IJsonTimin
 
 ## API
 
-undercut-f1 ships with a simple HTTP API which allows for local integrations with your timing screen/data. [see Configuration for details on how to enable the API](#configuration). Once enabled, visit [the Swagger UI page at http://localhost:61937/swagger/index.html](http://localhost:61937/swagger/index.html) to see what APIs are available. This is an easy place to test the API and see what kind of data you get, and also the schema.
+pitwall ships with a simple HTTP API which allows for local integrations with your timing screen/data. [see Configuration for details on how to enable the API](#configuration). Once enabled, visit [the Swagger UI page at http://localhost:61937/swagger/index.html](http://localhost:61937/swagger/index.html) to see what APIs are available. This is an easy place to test the API and see what kind of data you get, and also the schema.
 
 ### Control API
 
@@ -447,15 +439,15 @@ curl -H "content-type:application/json" -X POST http://localhost:61937/control -
 
 ### Data API
 
-The Data API `POST http://localhost:61938/data/<data-type>/latest` allow you to fetch the current raw timing data state. Take a look at the Swagger schema, and the [source model files](./UndercutF1.Data/Models/TimingDataPoints/) to understand more about what data is available for each timing `data-type`.
+The Data API `POST http://localhost:61938/data/<data-type>/latest` allow you to fetch the current raw timing data state. Take a look at the Swagger schema, and the [source model files](./Pitwall.Data/Models/TimingDataPoints/) to understand more about what data is available for each timing `data-type`.
 
 ## External Session Clock Sync
 
-If you watch F1 using an app like Kodi, you can choose to connect undercut-f1 to the Kodi API so that the undercut-f1's session clock automatically pauses when you pause the Kodi feed.
+If you watch F1 using an app like Kodi, you can choose to connect pitwall to the Kodi API so that the pitwall's session clock automatically pauses when you pause the Kodi feed.
 This allows you to keep your timing screen synchronised with your video feed.
 
 See [Configuration](#configuration) for how to configure the `externalPlayerSync` options to enable this functionality.
-Once configured, you can use the `Info` view in undercut-f1 to confirm its correct, and see if the WebSocket successfully connected.
+Once configured, you can use the `Info` view in pitwall to confirm its correct, and see if the WebSocket successfully connected.
 [Logs](#logging) are also output with information or any errors related to this functionality.
 
 > [!NOTE]
@@ -465,4 +457,10 @@ Once configured, you can use the `Info` view in undercut-f1 to confirm its corre
 
 ## Notice
 
-undercut-f1 is unofficial and are not associated in any way with the Formula 1 companies. F1, FORMULA ONE, FORMULA 1, FIA FORMULA ONE WORLD CHAMPIONSHIP, GRAND PRIX and related marks are trade marks of Formula One Licensing B.V.
+Pitwall is unofficial and is not associated in any way with the Formula 1 companies. F1, FORMULA ONE, FORMULA 1, FIA FORMULA ONE WORLD CHAMPIONSHIP, GRAND PRIX and related marks are trade marks of Formula One Licensing B.V.
+
+Pitwall is a modified version of [undercut-f1](https://github.com/JustAman62/undercut-f1), Copyright (C) Aman Dhoot.
+Modifications Copyright (C) 2026 Filippo Miatto. The changes made in this fork are recorded in the git history of this repository.
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation, version 3. It is distributed WITHOUT ANY WARRANTY; see the [LICENSE](LICENSE) file for details.

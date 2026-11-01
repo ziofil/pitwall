@@ -1,6 +1,6 @@
 # Building
 
-`undercut-f1` can be built in various way to support different deployment targets.
+`pitwall` can be built in various way to support different deployment targets.
 
 ## Native AOT
 
@@ -14,8 +14,8 @@ There is support for NativeAot though, and we ensure continued support by runnin
 ### Standalone Executable
 
 ```sh
-# dotnet publish -r <runtime> -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:IncludeAllContentForSelfExtract=true -p:PublicRelease=true UndercutF1.Console/UndercutF1.Console.csproj -o undercutf1-<runtime>-output
-dotnet publish -r linux-amd64 -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:IncludeAllContentForSelfExtract=true -p:PublicRelease=true UndercutF1.Console/UndercutF1.Console.csproj -o undercutf1-linux-amd64-output
+# dotnet publish -r <runtime> -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:IncludeAllContentForSelfExtract=true -p:PublicRelease=true Pitwall.Console/Pitwall.Console.csproj -o pitwall-<runtime>-output
+dotnet publish -r linux-amd64 -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:IncludeAllContentForSelfExtract=true -p:PublicRelease=true Pitwall.Console/Pitwall.Console.csproj -o pitwall-linux-amd64-output
 ```
 
 `IncludeNativeLibrariesForSelfExtract` and `IncludeAllContentForSelfExtract` ensures our native library dependencies are
@@ -32,18 +32,18 @@ suffixes.
 Build for a specific platform:
 
 ```sh
-docker build . -t justaman62/undercutf1:latest --platform linux/amd64
+docker build . -t ziofil/pitwall:latest --platform linux/amd64
 ```
 
 Run:
 
 ```sh
-docker run -it -e TERM_PROGRAM -v $HOME/undercut-f1/data:/data -v $HOME/undercut-f1/logs:/logs justaman62/undercutf1:latest
+docker run -it -e TERM_PROGRAM -v $HOME/pitwall/data:/data -v $HOME/pitwall/logs:/logs ziofil/pitwall:latest
 ```
 
-Passing through the `TERM_PROGRAM` environment variable helps `undercut-f1` detect which terminal graphics protocol to
+Passing through the `TERM_PROGRAM` environment variable helps `pitwall` detect which terminal graphics protocol to
 use.
 
 The data and logs directories are configured to be `/data` and `/logs` in the container, respectively.
-`-v $HOME/undercut-f1/data:/data -v $HOME/undercut-f1/logs:/logs` mounts these volumes to your home dir, but any dir
+`-v $HOME/pitwall/data:/data -v $HOME/pitwall/logs:/logs` mounts these volumes to your home dir, but any dir
 can be used.

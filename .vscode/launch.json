@@ -11,9 +11,9 @@
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build",
-      "program": "${workspaceFolder}/UndercutF1.Console/bin/Debug/net9.0/undercutf1.dll",
+      "program": "${workspaceFolder}/Pitwall.Console/bin/Debug/net9.0/pitwall.dll",
       "args": [],
-      "cwd": "${workspaceFolder}/UndercutF1.Console/",
+      "cwd": "${workspaceFolder}/Pitwall.Console/",
       "stopAtEntry": false,
       "console": "integratedTerminal"
     },
@@ -22,9 +22,9 @@
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build",
-      "program": "${workspaceFolder}/UndercutF1.Console/bin/Debug/net9.0/undercutf1.dll",
+      "program": "${workspaceFolder}/Pitwall.Console/bin/Debug/net9.0/pitwall.dll",
       "args": ["image", "${input:filepath}", "${input:protocol}"],
-      "cwd": "${workspaceFolder}/UndercutF1.Console/",
+      "cwd": "${workspaceFolder}/Pitwall.Console/",
       "stopAtEntry": false,
       "console": "integratedTerminal"
     }
