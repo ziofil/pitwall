@@ -101,7 +101,7 @@ To try it straight away without a live session, replay one of the sessions recor
 ./pitwall --data-directory "/path/to/pitwall/Sample Data"
 ```
 
-Choose **Replay a session**, then Silverstone and the Race. A replay starts at the beginning of the session: press <kbd>⇧ Shift</kbd>+<kbd>N</kbd> a few times to jump ahead.
+Choose **Replay a session**, then **Mexico City** and the Race: the 2026 Mexico City Grand Prix from lap 28 to the finish, with a safety car and a red flag. Older sessions from 2024 are there too. A replay starts from the beginning of the recording: press <kbd>⇧ Shift</kbd>+<kbd>N</kbd> a few times to jump ahead.
 
 ## Keys
 

@@ -16,6 +16,12 @@ public sealed class SampleRaceFixture() : SampleSessionFixture("2024_Silverstone
     public const int ReplayToLap = 30;
 }
 
+/// <summary>
+/// Replays the 2026 Mexico City Grand Prix to lap 56: a recording joined mid-race (at lap 29),
+/// with a safety car and a red flag.
+/// </summary>
+public sealed class SampleMexicoFixture() : SampleSessionFixture("2026_Mexico_City_Race", 55);
+
 /// <summary>Replays the whole recorded 2024 Imola qualifying session.</summary>
 public sealed class SampleQualifyingFixture()
     : SampleSessionFixture("2024_Imola_Qualifying", int.MaxValue);

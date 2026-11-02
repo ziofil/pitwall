@@ -167,7 +167,7 @@ public sealed class PitWallStrategyDisplay(
     /// leader's average lap, so the leader ends near zero.
     /// </para>
     /// </summary>
-    private Dictionary<string, List<(double Lap, double Delta)>> RaceTrace()
+    internal Dictionary<string, List<(double Lap, double Delta)>> RaceTrace()
     {
         var laps = timingData
             .DriversByLap.Where(x => x.Value.Count > 0)
