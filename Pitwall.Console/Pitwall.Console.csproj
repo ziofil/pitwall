@@ -15,7 +15,6 @@
   <ItemGroup>
     <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" />
     <PackageReference Include="InhibitSleep.Net" />
-    <PackageReference Include="InMemoryLogger" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.OpenApi" />
     <PackageReference Include="Serilog" />

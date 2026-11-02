@@ -1,3 +1,4 @@
+using Pitwall.Console.Graphics;
 using Pitwall.Data;
 using Spectre.Console;
 using Spectre.Console.Rendering;
@@ -19,9 +20,15 @@ public sealed class PitWallStrategyDisplay(
     SessionInfoProcessor sessionInfo,
     TrackStatusProcessor trackStatus,
     PitStopSeriesProcessor pitStops,
-    PitLaneTimeCollectionProcessor pitLaneTimes
+    PitLaneTimeCollectionProcessor pitLaneTimes,
+    ITerminalImages images
 ) : IDisplay
 {
+    /// <summary>Rows taken by the car panels and the notes line under the race trace.</summary>
+    private const int RowsBelowTrace = 13;
+
+    private readonly InlineImage _image = new(images);
+
     /// <summary>A rival within this many seconds could gain the place with an earlier stop.</summary>
     public const double UndercutRangeSeconds = 3.0;
 
@@ -29,14 +36,19 @@ public sealed class PitWallStrategyDisplay(
 
     public Screen Screen => Screen.PitWallStrategy;
 
-    // Smoothed values glide between feed updates, so redraw quickly to show the motion
-    public TimeSpan FrameInterval => TimeSpan.FromMilliseconds(66);
+    // Smoothed values glide between feed updates, so redraw quickly to show the motion; when
+    // drawing the race trace as an image, its cost sets the pace
+    public TimeSpan FrameInterval =>
+        _image.Supported ? _image.FrameInterval : TimeSpan.FromMilliseconds(66);
+
+    public Task PostContentDrawAsync(bool forceDraw) => _image.DrawAsync(forceDraw);
 
     public Task<IRenderable> GetContentAsync()
     {
         var team = context.Team;
         if (team is null || timingData.Latest.Lines.Count == 0)
         {
+            _image.Clear();
             return Task.FromResult(
                 components.Page(Screen, new Text("NO TEAM OR TIMING DATA", PitWallTheme.Dim))
             );
@@ -77,7 +89,7 @@ public sealed class PitWallStrategyDisplay(
         var body = new Layout("Strategy").SplitRows(
             new Layout("Trace", RaceTracePanel(team)),
             // Nine rows of detail per car, plus the panel border
-            new Layout("Cars", cars).Size(12),
+            new Layout("Cars", cars).Size(RowsBelowTrace - 1),
             new Layout("Notes", notes).Size(1)
         );
 
@@ -88,6 +100,7 @@ public sealed class PitWallStrategyDisplay(
     {
         if (!sessionInfo.Latest.IsRace())
         {
+            _image.Clear();
             return new Panel(new Text("RACE TRACE IS ONLY AVAILABLE IN RACES", PitWallTheme.Dim))
             {
                 Header = new PanelHeader("[bold] RACE TRACE [/]"),
@@ -99,12 +112,40 @@ public sealed class PitWallStrategyDisplay(
         var traces = RaceTrace();
         var focus = FocusCars(team);
 
-        return new Panel(
-            new CanvasRenderable(
+        IRenderable chart;
+        if (_image.Supported)
+        {
+            // Drawn as an image inside the panel's border, see PostContentDrawAsync
+            var (columns, rows) = _image.WindowCells;
+            var lines = traces
+                .Select(x => new TraceLine(
+                    context.Driver(x.Key).Tla ?? x.Key,
+                    (context.IsTeamCar(x.Key) ? team.Colour : context.Driver(x.Key).TeamColour)
+                        ?? "FFFFFF",
+                    context.IsTeamCar(x.Key) ? 2
+                        : focus.Contains(x.Key) ? 1
+                        : 0,
+                    x.Value
+                ))
+                .ToList();
+            _image.Update(
+                PitWallComponents.HeaderHeight + 1,
+                1,
+                columns - 2,
+                rows - PitWallComponents.BodyRowsOffset - RowsBelowTrace - 2,
+                (width, height) => ChartRenderers.RaceTrace(lines, width, height)
+            );
+            chart = new Text("");
+        }
+        else
+        {
+            chart = new CanvasRenderable(
                 canvas => DrawRaceTrace(canvas, traces, focus, team),
                 defaultRows: 16
-            )
-        )
+            );
+        }
+
+        return new Panel(chart)
         {
             Header = new PanelHeader(
                 "[bold] RACE TRACE [/][grey]time vs. reference pace (s) · team cars and their nearest rivals highlighted [/]"

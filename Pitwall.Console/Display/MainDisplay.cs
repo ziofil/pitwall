@@ -112,6 +112,7 @@ public class MainDisplay(
         {
             var session = $"{sessionInfo.Latest.Meeting?.Name} · {sessionInfo.Latest.Name}";
             rows.Add(new Markup($"[grey]SESSION[/]  [bold]{Markup.Escape(session)}[/]"));
+            rows.Add(new Markup("[grey]         restart Pitwall to watch a different session[/]"));
         }
         else
         {

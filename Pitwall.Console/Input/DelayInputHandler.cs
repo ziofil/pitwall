@@ -2,19 +2,17 @@ using Pitwall.Data;
 
 namespace Pitwall.Console;
 
-public class DelayInputHandler(IDateTimeProvider dateTimeProvider) : IInputHandler
+public class DelayInputHandler(IDateTimeProvider dateTimeProvider, State state) : IInputHandler
 {
     public bool IsEnabled => !dateTimeProvider.IsPaused;
 
     public Screen[] ApplicableScreens =>
         [
-            Screen.ManageSession,
             Screen.PitWallTiming,
             Screen.PitWallStrategy,
             Screen.PitWallTelemetry,
             Screen.PitWallTrackMap,
             Screen.PitWallComms,
-            Screen.DebugData,
         ];
 
     public ConsoleKey[] DisplayKeys => [ConsoleKey.N, ConsoleKey.M];
@@ -24,7 +22,7 @@ public class DelayInputHandler(IDateTimeProvider dateTimeProvider) : IInputHandl
     public ConsoleKey[] Keys =>
         [ConsoleKey.N, ConsoleKey.M, ConsoleKey.PrintScreen, ConsoleKey.Delete];
 
-    public string Description => "Delay";
+    public string Description => $"Delay {State.FormatDelay(dateTimeProvider.Delay)}";
 
     public int Sort => 22;
 
@@ -65,5 +63,7 @@ public class DelayInputHandler(IDateTimeProvider dateTimeProvider) : IInputHandl
 
         if (dateTimeProvider.Delay < TimeSpan.Zero)
             dateTimeProvider.Delay = TimeSpan.Zero;
+
+        state.DelayChangedAt = DateTimeOffset.UtcNow;
     }
 }

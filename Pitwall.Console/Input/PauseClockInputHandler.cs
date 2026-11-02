@@ -8,7 +8,6 @@ public class PauseClockInputHandler(IDateTimeProvider dateTimeProvider) : IInput
 
     public Screen[] ApplicableScreens =>
         [
-            Screen.ManageSession,
             Screen.PitWallTiming,
             Screen.PitWallStrategy,
             Screen.PitWallTelemetry,

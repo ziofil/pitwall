@@ -17,7 +17,8 @@ public sealed partial class PitWallCommsDisplay(
     RaceControlMessageProcessor raceControl,
     TeamRadioProcessor teamRadio,
     SessionInfoProcessor sessionInfo,
-    IDateTimeProvider dateTimeProvider
+    IDateTimeProvider dateTimeProvider,
+    RadioTranscriber transcriber
 ) : IDisplay
 {
     private const string Led = "#ff2020";
@@ -166,6 +167,16 @@ public sealed partial class PitWallCommsDisplay(
                 : $"[bold {Led} on #200000] {driver.RacingNumber} {driver.Tla} [/]";
         });
         rows.Add(new Markup(string.Join("  ", channels)));
+
+        // Transcription runs by itself in the background once the model is on this machine
+        if (transcriber.Problem is { } problem)
+            rows.Add(new Markup($"[yellow]{Markup.Escape(problem)}[/]"));
+        else if (!transcriber.ModelAvailable)
+            rows.Add(
+                new Markup(
+                    "[grey]To transcribe messages, download the transcription model from the menu (one time, 550 MB, runs on this machine).[/]"
+                )
+            );
         rows.Add(new Text(""));
 
         if (captures.Count == 0)
@@ -185,9 +196,12 @@ public sealed partial class PitWallCommsDisplay(
             var transcription = capture.Transcription?.ReplaceLineEndings(" ");
             if (!isSelected && transcription?.Length > 60)
                 transcription = transcription[..60] + "…";
-            var preview = transcription is null
-                ? "[grey]Enter to play · T to transcribe[/]"
-                : Markup.Escape(transcription);
+            var preview =
+                transcription is not null ? Markup.Escape(transcription)
+                : transcriber.Current == key ? "[olive]transcribing…[/]"
+                : transcriber.ModelAvailable && transcriber.Problem is null
+                    ? "[grey]waiting to transcribe[/]"
+                : "[grey]Enter to play[/]";
             rows.Add(
                 new Markup(
                     $@"{marker} [grey]{capture.Utc?.ToOffset(offset):HH\:mm\:ss}[/] [bold {Led}]{driver.Tla}[/] {preview}"
@@ -197,9 +211,7 @@ public sealed partial class PitWallCommsDisplay(
 
         return new Panel(new Rows(rows))
         {
-            Header = new PanelHeader(
-                "[bold] TEAM RADIO [/][grey]▲/▼ select · Enter play · T transcribe [/]"
-            ),
+            Header = new PanelHeader("[bold] TEAM RADIO [/][grey]▲/▼ select · Enter play [/]"),
             Expand = true,
             BorderStyle = new Style(foreground: PitWallTheme.Grid),
         };

@@ -53,7 +53,8 @@ public sealed class DownloadTranscriptionModelInputHandler(
             await transcriptionProvider.EnsureModelDownloaded();
             logger.LogInformation("Transcription model downloaded");
 
-            state.CurrentScreen = Screen.PitWallComms;
+            state.CurrentScreen = Screen.Main;
+            state.CursorOffset = 0;
         }
         catch (Exception ex)
         {

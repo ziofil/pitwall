@@ -33,7 +33,14 @@ public abstract class SampleSessionFixture
 
     protected SampleSessionFixture(string session, int replayToLap)
     {
-        var configuration = new ConfigurationBuilder().Build();
+        // An empty data directory, so tests never find a downloaded Whisper model and start
+        // transcribing (which would download radio audio)
+        var dataDirectory = Path.Join(Path.GetTempPath(), $"pitwall-tests-{Guid.NewGuid():N}");
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?> { ["DataDirectory"] = dataDirectory }
+            )
+            .Build();
         var services = new ServiceCollection()
             .AddLogging(logging => logging.AddProvider(NullLoggerProvider.Instance))
             .AddLiveTiming(configuration)
@@ -41,8 +48,11 @@ public abstract class SampleSessionFixture
             .AddSingleton<PitWallContext>()
             .AddSingleton<PitWallComponents>()
             .Configure<ConsoleOptions>(_ => { })
-            .AddSingleton<Graphics.ITerminalImages, NoTerminalImages>()
+            .AddSingleton<NoTerminalImages>()
+            .AddSingleton<Graphics.ITerminalImages>(x => x.GetRequiredService<NoTerminalImages>())
+            .AddSingleton<StartSimulatedSessionOptions>()
             .AddSingleton<MainMenu>()
+            .AddSingleton<RadioTranscriber>()
             .AddSingleton<MainDisplay>()
             .AddSingleton<SelectTeamDisplay>()
             .AddSingleton<PitWallTimingDisplay>()
@@ -143,14 +153,27 @@ public abstract class SampleSessionFixture
     }
 }
 
-/// <summary>A terminal without inline graphics, so pages use their text fallbacks in tests.</summary>
+/// <summary>
+/// A stand-in for the terminal's image support. By default it reports no inline graphics, so
+/// pages use their text fallbacks; tests can switch it on and look at the last image encoded.
+/// </summary>
 internal sealed class NoTerminalImages : Graphics.ITerminalImages
 {
-    public bool Supported => false;
+    public bool Supported { get; set; }
+
+    /// <summary>The last image a page sent, as PNG.</summary>
+    public byte[]? LastImage { get; private set; }
 
     public (int Columns, int Rows) WindowCells => (160, 45);
 
-    public (int Width, int Height) CellsToPixels(int columns, int rows) => (columns * 9, rows * 18);
+    // A high-resolution screen: 18x36 pixels per cell
+    public (int Width, int Height) CellsToPixels(int columns, int rows) =>
+        (columns * 18, rows * 36);
 
-    public string[] Encode(SkiaSharp.SKImage image, int columns, int rows) => [];
+    public string[] Encode(SkiaSharp.SKImage image, int columns, int rows)
+    {
+        using var data = Graphics.SKImageExtensions.EncodeFastPng(image);
+        LastImage = data.ToArray();
+        return ["image"];
+    }
 }

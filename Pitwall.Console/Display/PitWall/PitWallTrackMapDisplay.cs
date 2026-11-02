@@ -29,8 +29,7 @@ public sealed class PitWallTrackMapDisplay(
     ITerminalImages images
 ) : IDisplay
 {
-    private string[] _imageSequence = [];
-    private string[] _previousImageSequence = [];
+    private readonly InlineImage _image = new(images);
 
     private static readonly Color TrackColour = new(170, 170, 182);
     private static readonly Color RingColour = new(110, 110, 124);
@@ -39,11 +38,13 @@ public sealed class PitWallTrackMapDisplay(
 
     public Screen Screen => Screen.PitWallTrackMap;
 
-    // Redraw faster while smoothing is on so the cars animate between feed updates
+    // Redraw faster while smoothing is on so the cars animate between feed updates; when drawing
+    // images, the image sets the pace so a busy machine gets fewer frames rather than lag
     public TimeSpan FrameInterval =>
-        options.Value.EnablePositionSmoothing
-            ? TimeSpan.FromMilliseconds(66)
-            : TimeSpan.FromMilliseconds(IDisplay.DefaultFrameIntervalMs);
+        !options.Value.EnablePositionSmoothing
+            ? TimeSpan.FromMilliseconds(IDisplay.DefaultFrameIntervalMs)
+        : _image.Supported ? _image.FrameInterval
+        : TimeSpan.FromMilliseconds(66);
 
     internal sealed record CarOnTrack(
         string Number,
@@ -78,10 +79,18 @@ public sealed class PitWallTrackMapDisplay(
         else
         {
             var cars = CarsOnTrack(circuit, entries);
-            if (images.Supported)
+            if (_image.Supported)
             {
                 // Drawn over the empty body after the text is drawn, see PostContentDrawAsync
-                _imageSequence = RenderImage(circuit, cars);
+                var (columns, rows) = _image.WindowCells;
+                var scene = BuildScene(circuit, cars);
+                _image.Update(
+                    PitWallComponents.HeaderHeight,
+                    0,
+                    columns,
+                    rows - PitWallComponents.BodyRowsOffset,
+                    (width, height) => TrackMapRenderer.Render(scene, width, height)
+                );
                 body = new Text("");
             }
             else
@@ -97,30 +106,16 @@ public sealed class PitWallTrackMapDisplay(
         }
 
         if (body is not Text)
-            _imageSequence = [];
+            _image.Clear();
 
         return Task.FromResult(components.Page(Screen, body));
-    }
-
-    /// <summary>The body of the page as an inline image, filling the space below the header.</summary>
-    private string[] RenderImage(List<(int x, int y)> circuit, List<CarOnTrack> cars)
-    {
-        var (columns, rows) = images.WindowCells;
-        // Leave the header above and the key hints line below
-        rows -= PitWallComponents.HeaderHeight + 1;
-        if (columns <= 0 || rows <= 0)
-            return [];
-
-        var scene = BuildScene(circuit, cars);
-        var (width, height) = images.CellsToPixels(columns, rows);
-        using var image = TrackMapRenderer.Render(scene, width, height);
-        return images.Encode(image, columns, rows);
     }
 
     /// <summary>The cars, circuit and messages to draw, in the form the image renderer takes.</summary>
     internal TrackScene BuildScene(List<(int x, int y)> circuit, List<CarOnTrack> cars) =>
         new(
-            circuit.Select(p => (p.x, p.y)).ToList(),
+            // The session's own list, so the renderer can tell it's the same circuit each frame
+            circuit,
             sessionInfo.Latest.CircuitCorners,
             cars.Select(car => new TrackCar(
                     car.Number,
@@ -157,25 +152,7 @@ public sealed class PitWallTrackMapDisplay(
             : BuildScene(circuit, CarsOnTrack(circuit, entries));
     }
 
-    public async Task PostContentDrawAsync(bool forceDraw)
-    {
-        if (_imageSequence.Length == 0)
-        {
-            _previousImageSequence = [];
-            return;
-        }
-
-        // Re-send the image when the text layer was redrawn over it, or when the image changed
-        if (forceDraw || !_previousImageSequence.SequenceEqual(_imageSequence))
-        {
-            await Terminal.OutAsync(
-                ControlSequences.MoveCursorTo(PitWallComponents.HeaderHeight, 0)
-            );
-            foreach (var sequence in _imageSequence)
-                await Terminal.OutAsync(sequence);
-            _previousImageSequence = _imageSequence;
-        }
-    }
+    public Task PostContentDrawAsync(bool forceDraw) => _image.DrawAsync(forceDraw);
 
     internal List<CarOnTrack> CarsOnTrack(
         List<(int x, int y)> circuit,

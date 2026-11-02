@@ -9,6 +9,8 @@ namespace Pitwall.Console;
 /// and page tabs.
 /// </summary>
 public sealed class PitWallComponents(
+    State state,
+    RadioTranscriber transcriber,
     PitWallContext context,
     SessionInfoProcessor sessionInfo,
     LapCountProcessor lapCount,
@@ -31,12 +33,21 @@ public sealed class PitWallComponents(
 
     public const int HeaderHeight = 2;
 
+    /// <summary>
+    /// Rows of the window that aren't page body: the header above and the key hints line below.
+    /// </summary>
+    public const int BodyRowsOffset = HeaderHeight + 1;
+
     /// <summary>Wraps page content with the header bar.</summary>
-    public IRenderable Page(Screen screen, IRenderable content) =>
-        new Layout("PitWall").SplitRows(
+    public IRenderable Page(Screen screen, IRenderable content)
+    {
+        // Keep the team's radio transcribed in the background whichever page is showing
+        transcriber.Tick();
+        return new Layout("PitWall").SplitRows(
             new Layout("Header", Header(screen)).Size(HeaderHeight),
             new Layout("Body", content)
         );
+    }
 
     public IRenderable Header(Screen screen)
     {
@@ -88,6 +99,7 @@ public sealed class PitWallComponents(
             TrackStatusMarkup(),
             $@"{localTime:HH\:mm\:ss}",
             $@"REM {extrapolatedClock.ExtrapolatedRemaining():hh\:mm\:ss}",
+            DelayMarkup(),
             weatherText,
         };
 
@@ -108,6 +120,21 @@ public sealed class PitWallComponents(
             ),
             new SingleLine(tabs)
         );
+    }
+
+    /// <summary>
+    /// The stream delay: highlighted for a few seconds after it changes so it can be watched
+    /// while adjusting it, then grey. Hidden when there's no delay, and shows when paused.
+    /// </summary>
+    private string DelayMarkup()
+    {
+        var delay = State.FormatDelay(dateTimeProvider.Delay);
+        var paused = dateTimeProvider.IsPaused ? " [bold white on #c80000] PAUSED [/]" : "";
+        var justChanged = DateTimeOffset.UtcNow - state.DelayChangedAt < TimeSpan.FromSeconds(3);
+
+        return justChanged ? $"[bold black on #ffe600] DELAY {delay} [/]{paused}"
+            : dateTimeProvider.Delay > TimeSpan.Zero ? $"[grey]DELAY {delay}[/]{paused}"
+            : paused.TrimStart();
     }
 
     private string TrackStatusMarkup()

@@ -15,13 +15,16 @@ public sealed record MainMenuItem(string Label, string Detail, Func<Task> Activa
 public sealed class MainMenu(
     State state,
     ILiveTimingClient liveTimingClient,
+    IJsonTimingClient jsonTimingClient,
+    StartSimulatedSessionOptions replayOptions,
     TimingDataProcessor timingData,
     PitWallContext context,
-    Formula1Account accountService
+    Formula1Account accountService,
+    ITranscriptionProvider transcriptionProvider
 )
 {
     /// <summary>Whether a live or recorded session has started sending data.</summary>
-    public bool SessionRunning => timingData.Latest.Lines.Count > 0;
+    public bool SessionRunning => state.SessionStarted || timingData.Latest.Lines.Count > 0;
 
     public IReadOnlyList<MainMenuItem> Items
     {
@@ -48,26 +51,40 @@ public sealed class MainMenu(
                 );
             }
 
-            items.Add(
-                new(
-                    "Watch a live session",
-                    "Connect to the F1 live timing feed for the session happening now.",
-                    async () =>
-                    {
-                        await liveTimingClient.StartAsync();
-                        await Go(
-                            state.SelectedTeam is null ? Screen.SelectTeam : Screen.PitWallTiming
-                        );
-                    }
-                )
-            );
-            items.Add(
-                new(
-                    "Replay a session",
-                    "Play back a recorded or imported session. Download old ones with: pitwall import",
-                    () => Go(Screen.StartSimulatedSession)
-                )
-            );
+            // Only one session per run: once one has started its data can't be cleared, so a
+            // second one would mix with it
+            if (!SessionRunning)
+            {
+                items.Add(
+                    new(
+                        "Watch a live session",
+                        "Connect to the F1 live timing feed for the session happening now.",
+                        async () =>
+                        {
+                            state.SessionStarted = true;
+                            await liveTimingClient.StartAsync();
+                            await Go(
+                                state.SelectedTeam is null
+                                    ? Screen.SelectTeam
+                                    : Screen.PitWallTiming
+                            );
+                        }
+                    )
+                );
+                items.Add(
+                    new(
+                        "Replay a session",
+                        "Play back a recorded or imported session. Download old ones with: pitwall import",
+                        async () =>
+                        {
+                            replayOptions.Sessions =
+                                await jsonTimingClient.GetDirectoryNamesAsync();
+                            replayOptions.SelectedLocation = null;
+                            await Go(Screen.StartSimulatedSession);
+                        }
+                    )
+                );
+            }
             items.Add(
                 new(
                     "F1 TV account",
@@ -77,34 +94,16 @@ public sealed class MainMenu(
                     () => Go(Screen.ManageAccount)
                 )
             );
-            items.Add(
-                new(
-                    "Session details",
-                    "Connection status, stream delay and the latest messages received.",
-                    () => Go(Screen.ManageSession)
-                )
-            );
-            items.Add(
-                new(
-                    "Settings and info",
-                    "The configuration in use and where files are kept.",
-                    () => Go(Screen.Info)
-                )
-            );
-            items.Add(
-                new(
-                    "Logs",
-                    "What the app has been doing, for troubleshooting.",
-                    () => Go(Screen.Logs)
-                )
-            );
-            items.Add(
-                new(
-                    "Raw data",
-                    "The latest data received from each feed.",
-                    () => Go(Screen.DebugData)
-                )
-            );
+            if (!transcriptionProvider.IsModelDownloaded)
+            {
+                items.Add(
+                    new(
+                        "Download radio transcription model",
+                        "One-time 550 MB download. Team radio is then transcribed automatically, on this machine.",
+                        () => Go(Screen.DownloadTranscriptionModel)
+                    )
+                );
+            }
             items.Add(new("Quit", "Close Pitwall.", () => Go(Screen.Shutdown)));
             return items;
         }

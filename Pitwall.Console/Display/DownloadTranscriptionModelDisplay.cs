@@ -12,14 +12,17 @@ public class DownloadTranscriptionModelDisplay(ITranscriptionProvider transcript
     public Task<IRenderable> GetContentAsync()
     {
         var text = $"""
-            Transcriptions require a Whisper ML model to be downloaded.
-            We can download this model for you, and will store it at {transcriptionProvider.ModelPath}
-            This path is set as a child of the DataDirectory configuration option.
-            The model is around [bold]550MB[/].
+            Team radio transcription uses a Whisper speech recognition model that runs entirely on this machine:
+            no audio or text is sent anywhere.
 
-            Please press [bold]⏎ Enter[/] if you're happy for this model to be downloaded, or press [bold]Esc[/] to abort.
+            The model is a one-time download of about [bold]550 MB[/], stored at {Markup.Escape(
+                transcriptionProvider.ModelPath
+            )}
+            (inside the data directory; run [bold]pitwall info[/] to see where that is).
 
-            Once downloaded, you'll be sent back to the Team Radio list so you can try to transcribe again.
+            Press [bold]Enter[/] to download it, or [bold]Esc[/] to go back.
+
+            Once it's downloaded, the selected team's radio messages are transcribed automatically on the Comms page.
 
             """;
 

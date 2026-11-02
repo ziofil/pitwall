@@ -59,30 +59,86 @@ public static class TrackMapRenderer
         SKFontStyleSlant.Upright
     );
 
+    // The parts that don't change from frame to frame (ring, circuit, corners) are drawn once
+    // and reused, so each frame only draws the cars and messages on top
+    private static readonly Lock CacheLock = new();
+    private static (
+        int Width,
+        int Height,
+        IReadOnlyList<(int X, int Y)> Circuit,
+        SKImage Image
+    )? _staticLayer;
+
     public static SKImage Render(TrackScene scene, int width, int height)
     {
-        using var surface = SKSurface.Create(
-            new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul)
-        );
+        var info = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using var surface = SKSurface.Create(info);
         var canvas = surface.Canvas;
-        canvas.Clear(Background);
 
-        // Text scales with the image so it stays readable at any terminal size
-        var unit = Math.Max(10f, Math.Min(width, height) / 38f);
-
-        var half = width / 2f;
-        DrawRing(canvas, new SKRect(0, 0, half, height), scene, unit);
-        DrawCircuit(canvas, new SKRect(half, 0, width, height), scene, unit);
+        canvas.DrawImage(StaticLayer(scene, width, height, info), 0, 0);
+        Draw(canvas, scene, width, height, staticLayer: false);
 
         return surface.Snapshot();
     }
 
-    private static void DrawRing(SKCanvas canvas, SKRect area, TrackScene scene, float unit)
+    private static SKImage StaticLayer(TrackScene scene, int width, int height, SKImageInfo info)
+    {
+        lock (CacheLock)
+        {
+            if (
+                _staticLayer is { } cached
+                && cached.Width == width
+                && cached.Height == height
+                && ReferenceEquals(cached.Circuit, scene.Circuit)
+            )
+            {
+                return cached.Image;
+            }
+
+            using var surface = SKSurface.Create(info);
+            surface.Canvas.Clear(Background);
+            Draw(surface.Canvas, scene, width, height, staticLayer: true);
+            _staticLayer?.Image.Dispose();
+            var image = surface.Snapshot();
+            _staticLayer = (width, height, scene.Circuit, image);
+            return image;
+        }
+    }
+
+    /// <summary>Draws either the parts that never change, or the cars and messages.</summary>
+    private static void Draw(
+        SKCanvas canvas,
+        TrackScene scene,
+        int width,
+        int height,
+        bool staticLayer
+    )
+    {
+        // Text scales with the image so it stays readable at any terminal size
+        var unit = Math.Max(10f, Math.Min(width, height) / 38f);
+        var half = width / 2f;
+        DrawRing(canvas, new SKRect(0, 0, half, height), scene, unit, staticLayer);
+        DrawCircuit(canvas, new SKRect(half, 0, width, height), scene, unit, staticLayer);
+    }
+
+    private static void DrawRing(
+        SKCanvas canvas,
+        SKRect area,
+        TrackScene scene,
+        float unit,
+        bool staticLayer
+    )
     {
         var centre = new SKPoint(area.MidX, area.MidY);
         var radius = (Math.Min(area.Width, area.Height) / 2f) - (unit * 4.5f);
         if (radius < unit * 4)
             return;
+
+        if (!staticLayer)
+        {
+            DrawRingCars(canvas, centre, radius, scene, unit);
+            return;
+        }
 
         using var ring = new SKPaint
         {
@@ -134,7 +190,16 @@ public static class TrackMapRenderer
             smallFont,
             mutedText
         );
+    }
 
+    private static void DrawRingCars(
+        SKCanvas canvas,
+        SKPoint centre,
+        float radius,
+        TrackScene scene,
+        float unit
+    )
+    {
         // Cars as bars across the ring, background cars first so highlighted ones sit on top
         using var labelFont = new SKFont(Bold, unit * 0.9f);
         var placed = new List<SKRect>();
@@ -188,7 +253,13 @@ public static class TrackMapRenderer
         }
     }
 
-    private static void DrawCircuit(SKCanvas canvas, SKRect area, TrackScene scene, float unit)
+    private static void DrawCircuit(
+        SKCanvas canvas,
+        SKRect area,
+        TrackScene scene,
+        float unit,
+        bool staticLayer
+    )
     {
         var points = scene.Circuit;
         if (points.Count < 2)
@@ -212,6 +283,12 @@ public static class TrackMapRenderer
                 offsetX + ((x - minX) * scale),
                 area.Bottom - offsetY + area.Top - ((y - minY) * scale)
             );
+
+        if (!staticLayer)
+        {
+            DrawCircuitCars(canvas, scene, unit, Transform);
+            return;
+        }
 
         using var path = new SKPath();
         path.MoveTo(Transform(points[0].X, points[0].Y));
@@ -275,7 +352,15 @@ public static class TrackMapRenderer
                 cornerPaint
             );
         }
+    }
 
+    private static void DrawCircuitCars(
+        SKCanvas canvas,
+        TrackScene scene,
+        float unit,
+        Func<float, float, SKPoint> Transform
+    )
+    {
         using var labelFont = new SKFont(Bold, unit * 0.85f);
         var placed = new List<SKRect>();
         foreach (var car in scene.Cars.OrderBy(x => x.Focus).ThenBy(x => x.TeamCar))
@@ -325,12 +410,16 @@ public static class TrackMapRenderer
         bool alwaysShow
     )
     {
-        var width = font.MeasureText(car.Tla);
+        // Size the tag from the letters' actual outline, symmetric around the centre, so the
+        // text sits in the middle of it
+        font.MeasureText(car.Tla, out var ink);
+        var halfWidth = (ink.Width / 2f) + (unit * 0.3f);
+        var halfHeight = (CapHeight(font) / 2f) + (unit * 0.22f);
         var bounds = new SKRect(
-            centre.X - (width / 2f) - (unit * 0.3f),
-            centre.Y - (font.Size * 0.75f),
-            centre.X + (width / 2f) + (unit * 0.3f),
-            centre.Y + (font.Size * 0.4f)
+            centre.X - halfWidth,
+            centre.Y - halfHeight,
+            centre.X + halfWidth,
+            centre.Y + halfHeight
         );
         if (!alwaysShow && placed.Any(x => x.IntersectsWith(bounds)))
             return;
@@ -363,9 +452,15 @@ public static class TrackMapRenderer
         SKPaint paint
     )
     {
-        var width = font.MeasureText(text);
-        canvas.DrawText(text, centre.X - (width / 2f), centre.Y + (font.Size * 0.35f), font, paint);
+        // Centre the letters' visible outline rather than their advance width (which includes
+        // spacing around the glyphs), and centre capitals vertically on the point
+        font.MeasureText(text, out var ink);
+        canvas.DrawText(text, centre.X - ink.MidX, centre.Y + (CapHeight(font) / 2f), font, paint);
     }
+
+    /// <summary>The height of capital letters above the baseline.</summary>
+    private static float CapHeight(SKFont font) =>
+        font.Metrics.CapHeight > 0 ? font.Metrics.CapHeight : font.Size * 0.7f;
 
     /// <summary>Shortens text with an ellipsis so it fits the width.</summary>
     private static string Fit(string text, SKFont font, float maxWidth)

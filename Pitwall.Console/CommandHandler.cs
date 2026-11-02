@@ -1,5 +1,4 @@
 using System.CommandLine;
-using InMemLogger;
 using Pitwall.Console.ExternalPlayerSync;
 using Pitwall.Console.Graphics;
 using Pitwall.Data;
@@ -299,11 +298,7 @@ public static partial class CommandHandler
                 }
                 else
                 {
-                    configure
-                        .ClearProviders()
-                        .SetMinimumLevel(inMemoryLogLevel)
-                        .AddInMemory()
-                        .AddSerilog();
+                    configure.ClearProviders().SetMinimumLevel(inMemoryLogLevel).AddSerilog();
                 }
             })
             .Configure<ConsoleOptions>(builder.Configuration)

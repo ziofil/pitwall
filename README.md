@@ -31,7 +31,7 @@ Every page follows the team you picked, and its two cars are marked in the team 
 | `2` | **Strategy** | A race trace of every car's time against a reference pace, with the team's cars and their nearest rivals highlighted. For each car: tyre and stint age, pace and degradation per lap, the gaps ahead and behind with their trend, where it would rejoin if it pitted now, rivals within undercut range, and its pit stops. |
 | `3` | **Telemetry** | Waveform traces for both cars against lap distance (speed, throttle, brake, gear, RPM and DRS), the current lap drawn over the previous one, with live values and the best speeds through each speed trap. |
 | `4` | **Track** | A lap ring showing where every car is around the lap, with the latest race control messages inside it, next to the circuit map. Drawn as a real image in terminals that support inline graphics (iTerm2, Kitty, WezTerm, Ghostty and others), and with text characters everywhere else. |
-| `5` | **Comms** | Race control messages coloured by type, with the ones about the team marked, next to the team's radio. Play any message, or transcribe it on your machine with Whisper. |
+| `5` | **Comms** | Race control messages coloured by type, with the ones about the team marked, next to the team's radio. Every radio message is transcribed automatically, on your machine, and any of them can be played. |
 
 ![The track page: lap ring and circuit map](docs/images/track.png)
 
@@ -39,7 +39,7 @@ A few things worth knowing:
 
 - **Smooth numbers.** The feed updates gaps every few seconds and car positions about once a second. Pitwall buffers the updates, fits a curve through them and redraws at about 15 frames a second, so cars glide and gaps count smoothly instead of jumping. Real jumps, like a pit stop, still show as jumps.
 - **Pit loss.** The strategy page starts from the circuit's typical pit loss, switches to the time actually lost in this session's stops once there are some (comparing in- and out-laps with cars that stayed out on the same laps, so it still works when conditions change), and uses the much smaller safety car and VSC values when one is out.
-- **Delay.** TV broadcasts run 30 to 60 seconds behind the live feed. Add a delay so the pit wall matches your TV and doesn't spoil anything.
+- **Delay.** TV broadcasts run 30 to 60 seconds behind the live feed. Add a delay with <kbd>N</kbd>/<kbd>M</kbd> so the pit wall matches your TV and doesn't spoil anything; the header shows it, highlighted while you change it.
 
 ## Install
 
@@ -67,13 +67,13 @@ Some optional features use tools you may need to install:
 | Feature | Needs |
 | --- | --- |
 | Team radio playback | `afplay` on macOS (built in), `mpg123` on Linux, or FFmpeg's `ffplay` anywhere (always used on Windows) |
-| Team radio transcription | FFmpeg. The Whisper model is downloaded the first time you transcribe, after asking. |
+| Team radio transcription | FFmpeg, and the Whisper model: a one-time 550 MB download from the menu. Transcription runs entirely on your machine. |
 | Track images | `fontconfig` on Linux (`apt install libfontconfig`) |
 | F1 TV login window | WebView2 on Windows and WebKit on macOS (both built in); WebKitGTK on Linux |
 
 ## Getting started
 
-Start `pitwall` and use the menu with the arrow keys and <kbd>Enter</kbd>:
+Start `pitwall` and use the menu with the arrow keys and <kbd>Enter</kbd>. One session runs at a time: to switch to another, restart Pitwall.
 
 1. **Watch a live session** to connect to the session happening now, or **Replay a session** to play back a recorded or imported one.
 2. Pick the team to follow.
@@ -97,7 +97,6 @@ The keys for the current screen are always shown along the bottom.
 | <kbd>◄</kbd> <kbd>►</kbd>, <kbd>1</kbd>–<kbd>5</kbd> | Change pit wall page |
 | <kbd>▲</kbd> <kbd>▼</kbd>, <kbd>Tab</kbd> / <kbd>⇧ Shift</kbd>+<kbd>Tab</kbd> | Next or previous team on the pit wall (on Comms the arrows pick radio messages, so use <kbd>Tab</kbd>) |
 | <kbd>Enter</kbd> | On the pit wall, open the team list; on Comms, play the selected radio message |
-| <kbd>T</kbd> | On Comms, transcribe the selected radio message |
 | <kbd>N</kbd> / <kbd>M</kbd> | Less / more stream delay, by 5 seconds (30 with <kbd>⇧ Shift</kbd>); <kbd>,</kbd> / <kbd>.</kbd> change it by 1 second |
 | <kbd>P</kbd> | Pause or resume the session clock, e.g. to line up a replay with a recorded broadcast |
 | <kbd>Esc</kbd> or <kbd>Backspace</kbd> | Back |
@@ -127,7 +126,7 @@ If the login window doesn't work on your system, you can copy the token yourself
 
 ## Configuration
 
-Settings come from a `config.json` file, command line options or environment variables. Choose **Settings and info** in the menu to see what's in use. Add `"$schema": "https://raw.githubusercontent.com/ziofil/pitwall/refs/heads/master/config.schema.json"` to the file for autocompletion in editors.
+Settings come from a `config.json` file, command line options or environment variables. Run `pitwall info` to see what's in use. Add `"$schema": "https://raw.githubusercontent.com/ziofil/pitwall/refs/heads/master/config.schema.json"` to the file for autocompletion in editors.
 
 | Setting | Command line | Environment variable | What it does |
 | --- | --- | --- | --- |
@@ -172,7 +171,7 @@ With `apiEnabled` on, Pitwall serves an HTTP API at `http://localhost:61937`. Br
 - `POST /control` with `{"operation": "PauseClock"}`, `"ResumeClock"` or `"ToggleClock"` controls the session clock, so you can hook Pitwall up to a remote, a stream deck or your own scripts.
 - `GET /data/<type>/latest` returns the latest raw data of each feed, e.g. `TimingData` or `CarData`. The [data models](Pitwall.Data/Models/TimingDataPoints/) describe what's in each.
 
-If you watch with [Kodi](https://kodi.tv), Pitwall can pause its clock whenever you pause the video, keeping the pit wall in step with what you see. Set `externalPlayerSync.enabled` to `true`, `externalPlayerSync.serviceType` to `Kodi` and `externalPlayerSync.url` to Kodi's WebSocket address, usually `ws://localhost:9090/jsonrpc`. **Settings and info** shows whether it's connected.
+If you watch with [Kodi](https://kodi.tv), Pitwall can pause its clock whenever you pause the video, keeping the pit wall in step with what you see. Set `externalPlayerSync.enabled` to `true`, `externalPlayerSync.serviceType` to `Kodi` and `externalPlayerSync.url` to Kodi's WebSocket address, usually `ws://localhost:9090/jsonrpc`. `pitwall info` shows whether it's connected.
 
 ## Building and contributing
 

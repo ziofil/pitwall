@@ -1,3 +1,4 @@
+using Pitwall.Console.Graphics;
 using Pitwall.Data;
 using Spectre.Console;
 using Spectre.Console.Rendering;
@@ -15,9 +16,18 @@ public sealed class PitWallTelemetryDisplay(
     PitWallContext context,
     CarDataProcessor carData,
     CarTelemetryHistoryProcessor telemetry,
-    TimingStatsProcessor timingStats
+    TimingStatsProcessor timingStats,
+    ITerminalImages images
 ) : IDisplay
 {
+    // Rows of each car's column above and below the trace strips: title bar and legend, and
+    // the distance axis; plus the status bar under the columns
+    private const int RowsAboveStrips = 6;
+    private const int RowsBelowStrips = 2;
+    private const int LabelColumns = 11;
+
+    private readonly InlineImage _image = new(images);
+
     private static readonly Color TitleBar = new(43, 43, 43);
     private static readonly Color StatusBar = new(30, 127, 216);
     private static readonly Color PreviousLap = new(85, 85, 95);
@@ -41,20 +51,72 @@ public sealed class PitWallTelemetryDisplay(
 
     public Screen Screen => Screen.PitWallTelemetry;
 
-    // Smoothed values glide between feed updates, so redraw quickly to show the motion
-    public TimeSpan FrameInterval => TimeSpan.FromMilliseconds(66);
+    // Speed, throttle, brake and so on drawn as images: weights set how much height each gets
+    private static readonly TelemetryChannel[] ImageChannels =
+    [
+        .. Channels.Select(channel => new TelemetryChannel(
+            channel.Name,
+            channel.Unit,
+            channel.Colour.ToHex(),
+            channel.Value,
+            channel.Min,
+            channel.Max,
+            channel.Name switch
+            {
+                "vCar" => 4,
+                "pBrake" or "DRS" => 1,
+                _ => 2,
+            }
+        )),
+    ];
+
+    // Smoothed values glide between feed updates, so redraw quickly to show the motion; when
+    // drawing the traces as an image, its cost sets the pace
+    public TimeSpan FrameInterval =>
+        _image.Supported ? _image.FrameInterval : TimeSpan.FromMilliseconds(66);
+
+    public Task PostContentDrawAsync(bool forceDraw) => _image.DrawAsync(forceDraw);
 
     public Task<IRenderable> GetContentAsync()
     {
         var team = context.Team;
         if (team is null)
         {
+            _image.Clear();
             return Task.FromResult(
                 components.Page(Screen, new Text("NO TEAM SELECTED", PitWallTheme.Dim))
             );
         }
 
         var hasData = team.DriverNumbers.Any(x => telemetry.GetLaps(x).Count > 0);
+        if (hasData && _image.Supported)
+        {
+            // Both cars' trace strips as one image, drawn over the empty strip area of the columns
+            var cars = team
+                .DriverNumbers.Select(number => LapsFor(number))
+                .Select(x => new TelemetryCar(x.Current, x.Previous))
+                .ToList();
+            var (columns, rows) = _image.WindowCells;
+            _image.Update(
+                PitWallComponents.HeaderHeight + RowsAboveStrips,
+                0,
+                columns,
+                rows - PitWallComponents.BodyRowsOffset - RowsAboveStrips - RowsBelowStrips,
+                (width, height) =>
+                    ChartRenderers.Telemetry(
+                        cars,
+                        ImageChannels,
+                        width,
+                        height,
+                        LabelColumns * width / (float)columns
+                    )
+            );
+        }
+        else
+        {
+            _image.Clear();
+        }
+
         IRenderable body = hasData
             ? new Layout("Cars").SplitColumns(
                 team.DriverNumbers.Select(number => new Layout(number, CarWaveform(number)))
@@ -76,9 +138,9 @@ public sealed class PitWallTelemetryDisplay(
         return Task.FromResult(components.Page(Screen, layout));
     }
 
-    private Layout CarWaveform(string number)
+    /// <summary>The lap in progress, drawn up to the car's interpolated position, and the lap before.</summary>
+    private (TelemetryLap? Current, TelemetryLap? Previous) LapsFor(string number)
     {
-        var driver = context.Driver(number);
         var laps = telemetry.GetLaps(number);
         var current = laps.Count > 0 ? laps[^1] : null;
 
@@ -95,7 +157,13 @@ public sealed class PitWallTelemetryDisplay(
                 Samples = [.. current.Samples.Where(x => x.Distance < live.Distance), live],
             };
         }
-        var previous = laps.Count > 1 ? laps[^2] : null;
+        return (current, laps.Count > 1 ? laps[^2] : null);
+    }
+
+    private Layout CarWaveform(string number)
+    {
+        var driver = context.Driver(number);
+        var (current, previous) = LapsFor(number);
         var teamHex = PitWallTheme.TeamColour(driver.TeamColour).ToHex();
 
         var title = new SingleLine(
@@ -117,7 +185,7 @@ public sealed class PitWallTelemetryDisplay(
                         new Layout(
                             "Label",
                             ChannelLabel(channel.Name, channel.Unit, channel.Colour)
-                        ).Size(11),
+                        ).Size(LabelColumns),
                         new Layout(
                             "Trace",
                             new CanvasRenderable(canvas =>
@@ -168,10 +236,13 @@ public sealed class PitWallTelemetryDisplay(
             )
             .ToArray();
 
+        // With inline images the strips are drawn as one image over this empty area
+        var stripLayouts = _image.Supported ? [new Layout("Strips", new Text(""))] : strips;
+
         return new Layout(number).SplitRows([
             new Layout("Title", title).Size(1),
-            new Layout("Legend", Legend(number)).Size(5),
-            .. strips,
+            new Layout("Legend", Legend(number)).Size(RowsAboveStrips - 1),
+            .. stripLayouts,
             new Layout("Axis", DistanceAxis(lapLength)).Size(1),
         ]);
     }

@@ -31,13 +31,46 @@ public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<Samp
 
         Assert.Contains("██████╗", text);
         Assert.Contains("Open the pit wall", text);
-        Assert.Contains("Replay a session", text);
         Assert.Contains("Quit", text);
+        // A session is running, so another can't be started on top of it
+        Assert.DoesNotContain("Replay a session", text);
+        Assert.DoesNotContain("Watch a live session", text);
+        Assert.Contains("restart Pitwall to watch a different session", text);
+        // Debug screens are no longer in the menu
+        Assert.DoesNotContain("Raw data", text);
+        Assert.DoesNotContain("Logs", text);
         Assert.DoesNotContain(
             "undercut",
             text.Replace("a fork of undercut-f1", ""),
             StringComparison.OrdinalIgnoreCase
         );
+    }
+
+    [Theory]
+    [InlineData(45, "0:45")]
+    [InlineData(3750, "1:02:30")]
+    [InlineData(90061, "1d 01:01:01")]
+    public void DelayIsFormattedCompactly(int seconds, string expected) =>
+        Assert.Equal(expected, State.FormatDelay(TimeSpan.FromSeconds(seconds)));
+
+    [Fact]
+    public async Task HeaderHighlightsTheDelayRightAfterAChange()
+    {
+        var state = fixture.Services.GetRequiredService<State>();
+        state.DelayChangedAt = DateTimeOffset.UtcNow;
+
+        var text = await RenderAsync<PitWallTimingDisplay>(width: 220);
+
+        Assert.Contains(" DELAY ", text);
+    }
+
+    [Fact]
+    public async Task CommsPageOffersTheTranscriptionModelWhenMissing()
+    {
+        var text = await RenderAsync<PitWallCommsDisplay>(width: 200);
+
+        Assert.Contains("download the transcription model", text);
+        Assert.DoesNotContain("T transcribe", text);
     }
 
     [Fact]
@@ -126,6 +159,52 @@ public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<Samp
         Directory.CreateDirectory(directory);
         using var data = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
         File.WriteAllBytes(Path.Join(directory, "TrackImage.png"), data.ToArray());
+    }
+
+    [Theory]
+    [InlineData(typeof(PitWallStrategyDisplay))]
+    [InlineData(typeof(PitWallTelemetryDisplay))]
+    [InlineData(typeof(PitWallTrackMapDisplay))]
+    public async Task ChartsAreDrawnAsImagesWhenTheTerminalSupportsThem(Type displayType)
+    {
+        var terminal = fixture.Services.GetRequiredService<NoTerminalImages>();
+        var state = fixture.Services.GetRequiredService<State>();
+        state.SelectedTeam = "Mercedes";
+        var display = (IDisplay)fixture.Services.GetRequiredService(displayType);
+        state.CurrentScreen = display.Screen;
+        try
+        {
+            terminal.Supported = true;
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            const int frames = 10;
+            for (var i = 0; i < frames; i++)
+                await display.GetContentAsync();
+            var perFrame = stopwatch.Elapsed.TotalMilliseconds / frames;
+
+            if (displayType == typeof(PitWallTrackMapDisplay) && !fixture.HasCircuitMap)
+                return;
+            Assert.NotNull(terminal.LastImage);
+
+            // Saved next to the other renders, for looking at
+            var directory = Path.Join(AppContext.BaseDirectory, "renders");
+            Directory.CreateDirectory(directory);
+            await File.WriteAllBytesAsync(
+                Path.Join(directory, $"{display.Screen}-image.png"),
+                terminal.LastImage
+            );
+            await File.WriteAllTextAsync(
+                Path.Join(directory, $"{display.Screen}-frame-ms.txt"),
+                $"{perFrame:0.0}"
+            );
+
+            // A frame, including rendering and compressing the image, must leave plenty of room
+            // in a 66ms frame even on a slow machine
+            Assert.True(perFrame < 60, $"{perFrame:0.0}ms per frame");
+        }
+        finally
+        {
+            terminal.Supported = false;
+        }
     }
 
     [Fact]

@@ -128,26 +128,31 @@ public class StartSimulatedSessionDisplay(
             tables.Add(sessionTable);
         }
 
-        var title = $"""
-            Select the data directory to run the simulation from. 
+        var dataDirectory = Markup.Escape(options.Value.DataDirectory);
+        var helperText = new Markup(
+            $"""
+            [bold]Replay a session[/]  [grey]▲/▼ move · Enter or ► choose · ◄ back to the list of events · Esc menu[/]
+            [grey]Recordings and imported sessions are read from {dataDirectory}[/]
 
-            If you cannot see your directory here, ensure that it contains both a file named subscribe.json and live.jsonl.
-            The directory name must be of the form /<location>_<session-type>/ e.g. /Silverstone_Practice_1/
-
-            To change the data directory, set the PITWALL_DATADIRECTORY environment variable or pass in the --data-directory argument.
-            Configured Directory: {options.Value.DataDirectory}
-            """;
-        var helperText = new Text(title);
+            """
+        );
 
         var missingDirectoryText = new Markup(
             $"""
-            [red]No data found in {options.Value.DataDirectory}.
-            You can try to import data using the [bold]pitwall import[/] command[/]
+            [yellow]No recorded sessions found in {dataDirectory}.[/]
+
+            Sessions you watch live are recorded there automatically. To get a finished session, download it from F1:
+              [bold]pitwall import 2025[/]                       list the events of a season
+              [bold]pitwall import 2025 --meeting-key <key>[/]   list an event's sessions
+              [bold]pitwall import 2025 --meeting-key <key> --session-key <key>[/]   download one
+
+            To replay recordings kept somewhere else, start Pitwall with [bold]--data-directory <folder>[/],
+            for example the [bold]Sample Data[/] folder in the Pitwall repository.
             """
         );
 
         var layout = new Layout("Root").SplitRows(
-            new Layout("Title", helperText).Size(8),
+            new Layout("Title", helperText).Size(3),
             directories.Count > 0
                 ? new Layout("Tables", new Columns(tables).Collapse())
                 : new Layout("Missing", missingDirectoryText)
