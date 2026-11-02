@@ -10,7 +10,8 @@ namespace Pitwall.Console;
 /// The track position page, laid out like the team track displays seen on pit walls: a lap ring
 /// showing where every car is around the lap (with the latest race control messages and the
 /// clocks inside), next to the circuit outline with the cars on it. The team's cars are drawn
-/// in the team colour, cars off track or stopped in red, cars in the pit lane in cyan.
+/// in the team colour, cars off track in red, cars in the pit lane in cyan; cars out of the race
+/// are left off.
 /// Terminals with inline graphics get a drawn image with solid lines and real text; others get a
 /// braille-character version. With position smoothing on, cars glide between the feed's roughly
 /// once-a-second updates and the page redraws at ~15 fps.
@@ -175,8 +176,8 @@ public sealed class PitWallTrackMapDisplay(
             }
             var line = timingData.Latest.Lines.GetValueOrDefault(number);
             // Skip the safety car and medical car, which are in the position feed but aren't
-            // racing, and cars that have retired
-            if (line is null || line.Retired == true)
+            // racing, and cars out of the race, which stay in the feed where they parked
+            if (line is null || line.Retired == true || line.Stopped == true)
                 continue;
 
             // Progress around the lap is the index of the nearest point on the circuit outline
@@ -197,7 +198,6 @@ public sealed class PitWallTrackMapDisplay(
             var colour =
                 context.IsTeamCar(number) ? teamColour
                 : entry.Status == PositionDataPoint.PositionData.Entry.DriverStatus.OffTrack
-                || line?.Stopped == true
                     ? PitWallTheme.Red
                 : line?.InPit == true ? PitWallTheme.Cyan
                 : focus.Contains(number) ? OtherCar

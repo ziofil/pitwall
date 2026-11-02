@@ -21,8 +21,6 @@ public sealed partial class PitWallCommsDisplay(
     RadioTranscriber transcriber
 ) : IDisplay
 {
-    private const string Led = "#ff2020";
-
     public Screen Screen => Screen.PitWallComms;
 
     /// <summary>
@@ -166,8 +164,8 @@ public sealed partial class PitWallCommsDisplay(
             var live =
                 latest?.Utc is { } utc && dateTimeProvider.Utc - utc < TimeSpan.FromSeconds(30);
             return live
-                ? $"[bold black on {Led}] {driver.RacingNumber} {driver.Tla} [/]"
-                : $"[bold {Led} on #200000] {driver.RacingNumber} {driver.Tla} [/]";
+                ? $"[bold black on {TeamHex(driver)}] {driver.RacingNumber} {driver.Tla} [/]"
+                : $"[bold {TeamHex(driver)}] {driver.RacingNumber} {driver.Tla} [/]";
         });
         rows.Add(new Markup(string.Join("  ", channels)));
 
@@ -226,7 +224,7 @@ public sealed partial class PitWallCommsDisplay(
             list.AddRow(
                 new Markup(isSelected ? "[black on white]►[/]" : " "),
                 new Markup($@"[grey]{capture.Utc?.ToOffset(offset):HH\:mm\:ss}[/]"),
-                new Markup($"[bold {Led}]{driver.Tla}[/]"),
+                new Markup($"[bold {TeamHex(driver)}]{driver.Tla}[/]"),
                 new Markup(text)
             );
         }
@@ -239,4 +237,7 @@ public sealed partial class PitWallCommsDisplay(
             BorderStyle = new Style(foreground: PitWallTheme.Grid),
         };
     }
+
+    private static string TeamHex(DriverListDataPoint.Driver driver) =>
+        PitWallTheme.TeamColour(driver.TeamColour).ToMarkup();
 }
