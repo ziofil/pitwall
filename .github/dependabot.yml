@@ -9,6 +9,11 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # The source generators in gen/ must be built against a Roslyn version no newer than the
+      # compiler in the .NET SDK people build with, or they fail to load and the build breaks.
+      # Update these by hand, to at most the Roslyn version of the oldest SDK we support.
+      - dependency-name: "Microsoft.CodeAnalysis.*"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
