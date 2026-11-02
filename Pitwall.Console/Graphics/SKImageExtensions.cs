@@ -46,9 +46,9 @@ internal static class SKImageExtensions
     /// </summary>
     public static SKData EncodeFastPng(this SKImage image)
     {
+        // Images not held in memory can't be encoded with options; use the default encoder then
         using var pixmap = image.PeekPixels();
-        return pixmap is null
-            ? image.Encode()
-            : pixmap.Encode(new SKPngEncoderOptions(SKPngEncoderFilterFlags.NoFilters, 1));
+        return pixmap?.Encode(new SKPngEncoderOptions(SKPngEncoderFilterFlags.NoFilters, 1))
+            ?? image.Encode();
     }
 }
