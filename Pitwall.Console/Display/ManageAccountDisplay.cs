@@ -16,7 +16,8 @@ public sealed class ManageAccountDisplay(
     {
         var markupText = accountService.IsAuthenticated switch
         {
-            Formula1Account.AuthenticationResult.Success => $"""
+            Formula1Account.AuthenticationResult.Success =>
+                $"""
                 [green]You're logged in to your F1 TV account.[/]
 
                 The access token is stored in [bold]{Markup.Escape(
@@ -27,7 +28,8 @@ public sealed class ManageAccountDisplay(
 
                 {LoggedInOptions()}
                 """,
-            Formula1Account.AuthenticationResult.NoToken => $"""
+            Formula1Account.AuthenticationResult.NoToken =>
+                $"""
                 Log in to your Formula 1 account (with any level of F1 TV subscription) to receive all the live timing feeds.
 
                 An account is [bold]not[/] needed to use Pitwall. During live sessions it adds:
