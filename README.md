@@ -33,6 +33,16 @@ Every page follows the team you picked, and its two cars are marked in the team 
 | `4` | **Track** | A lap ring showing where every car is around the lap, with the latest race control messages inside it, next to the circuit map. Drawn as a real image in terminals that support inline graphics (iTerm2, Kitty, WezTerm, Ghostty and others), and with text characters everywhere else. |
 | `5` | **Comms** | Race control messages coloured by type, with the ones about the team marked, next to the team's radio. Every radio message is transcribed automatically, on your machine, and any of them can be played. |
 
+**Strategy:** the race trace at Silverstone 2024. The field slows as the rain arrives around lap 18, then everyone stops for intermediates around lap 27. The team's cars are in team colour, with the cars around them in their colours and the rest of the field in grey.
+
+![The race trace on the strategy page](docs/images/race-trace.png)
+
+**Telemetry:** both cars' current lap over the previous one (grey), with the white cursor at each car's position.
+
+![Telemetry traces for both cars](docs/images/telemetry.png)
+
+**Track:** where every car is around the lap, and on the circuit.
+
 ![The track page: lap ring and circuit map](docs/images/track.png)
 
 A few things worth knowing:
