@@ -148,7 +148,7 @@ public sealed class PitWallStrategyDisplay(
         return new Panel(chart)
         {
             Header = new PanelHeader(
-                "[bold] RACE TRACE [/][grey]time vs. reference pace (s) · team cars and their nearest rivals highlighted [/]"
+                "[bold] RACE TRACE [/][grey]seconds ahead of the leader's average pace · team cars and nearest rivals highlighted [/]"
             ),
             Expand = true,
             Padding = new Padding(0),
