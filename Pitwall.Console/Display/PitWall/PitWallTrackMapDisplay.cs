@@ -174,7 +174,9 @@ public sealed class PitWallTrackMapDisplay(
                 (x, y) = ((int)Math.Round(smoothed.x), (int)Math.Round(smoothed.y));
             }
             var line = timingData.Latest.Lines.GetValueOrDefault(number);
-            if (line?.Retired == true)
+            // Skip the safety car and medical car, which are in the position feed but aren't
+            // racing, and cars that have retired
+            if (line is null || line.Retired == true)
                 continue;
 
             // Progress around the lap is the index of the nearest point on the circuit outline

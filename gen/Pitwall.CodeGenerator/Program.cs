@@ -15,9 +15,19 @@ switch (task)
         await new CircuitDownloader().DownloadAsync(repositoryRoot);
         await Terminal.OutLineAsync("Finished downloading circuit data");
         break;
+    case "screenshots" when args.Length >= 3:
+        await Terminal.OutLineAsync($"Rendering screenshots from {args[1]}");
+        await new Screenshots().RenderAsync(
+            repositoryRoot,
+            args[1],
+            int.Parse(args[2]),
+            args.ElementAtOrDefault(3)
+        );
+        await Terminal.OutLineAsync("Finished rendering screenshots");
+        break;
     default:
         await Terminal.OutLineAsync(
-            "Usage: dotnet run --project gen/Pitwall.CodeGenerator -- [schema|circuits]"
+            "Usage: dotnet run --project gen/Pitwall.CodeGenerator -- [schema | circuits | screenshots <recording folder> <lap> [team]]"
         );
         break;
 }

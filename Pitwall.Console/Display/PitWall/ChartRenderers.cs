@@ -72,7 +72,16 @@ public static class ChartRenderers
         using var font = new SKFont(Regular, unit * 0.85f);
         using var labelFont = new SKFont(Bold, unit);
 
-        var maxLap = Math.Max(5, lines.Max(x => x.Points.Count == 0 ? 0 : x.Points[^1].Lap));
+        // Laps shown: from the first lap in the data (0 for a full race, later if joined mid-race)
+        var minLap = lines
+            .Where(x => x.Points.Count > 0)
+            .Select(x => x.Points[0].Lap)
+            .DefaultIfEmpty(0)
+            .Min();
+        var maxLap = Math.Max(
+            minLap + 5,
+            lines.Max(x => x.Points.Count == 0 ? 0 : x.Points[^1].Lap)
+        );
         var focusValues = lines
             .Where(x => x.Emphasis > 0)
             .SelectMany(x => x.Points.Select(p => p.Delta))
@@ -87,12 +96,17 @@ public static class ChartRenderers
             width - (unit * 4.5f),
             height - (unit * 1.6f)
         );
-        float X(double lap) => plot.Left + (float)(lap / maxLap * plot.Width);
+        float X(double lap) => plot.Left + (float)((lap - minLap) / (maxLap - minLap) * plot.Width);
         float Y(double delta) =>
             plot.Top
             + (float)((1 - ((Math.Clamp(delta, minY, maxY) - minY) / (maxY - minY))) * plot.Height);
 
-        // Grid every 10 seconds and every 5 laps, with their values
+        // Grid lines at a round step that gives a handful of lines for the range shown, and
+        // every 5 laps, with their values
+        var step = new[] { 5.0, 10, 20, 50, 100, 200, 500 }.FirstOrDefault(
+            x => (maxY - minY) / x <= 8,
+            1000
+        );
         using var gridPaint = new SKPaint
         {
             Color = Grid,
@@ -100,7 +114,7 @@ public static class ChartRenderers
             IsAntialias = true,
         };
         using var gridText = new SKPaint { Color = GridText, IsAntialias = true };
-        for (var y = Math.Ceiling(minY / 10) * 10; y <= maxY; y += 10)
+        for (var y = Math.Ceiling(minY / step) * step; y <= maxY; y += step)
         {
             canvas.DrawLine(plot.Left, Y(y), plot.Right, Y(y), gridPaint);
             var text = $"{y:0}";
@@ -112,7 +126,7 @@ public static class ChartRenderers
                 gridText
             );
         }
-        for (var lap = 5; lap <= maxLap; lap += 5)
+        for (var lap = (int)Math.Ceiling(minLap / 5) * 5; lap <= maxLap; lap += 5)
         {
             canvas.DrawLine(X(lap), plot.Top, X(lap), plot.Bottom, gridPaint);
             var text = $"{lap}";

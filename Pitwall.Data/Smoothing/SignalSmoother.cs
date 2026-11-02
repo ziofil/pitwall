@@ -64,12 +64,19 @@ public sealed class SignalSmoother(
         lock (series)
         {
             var samples = series.Samples;
-            if (samples.Count > 0 && time <= samples[^1].Time)
+            if (samples.Count > 0 && time == samples[^1].Time)
             {
-                // Out of order or duplicate time: keep the newest value for that time
-                if (time == samples[^1].Time)
-                    samples[^1] = (time, value);
-                return;
+                // A second value for the same moment replaces the first
+                samples.RemoveAt(samples.Count - 1);
+            }
+            else if (samples.Count > 0 && time < samples[^1].Time)
+            {
+                // The clock jumped back (the delay was increased, or a replay set its start
+                // time), so the samples so far belong to a different timeline: start again.
+                // Ignoring the new sample instead would freeze the value until the clock caught up.
+                samples.Clear();
+                series.Curve = null;
+                series.LastShown = DateTimeOffset.MinValue;
             }
 
             // Compare with the last real sample, not the curve's trend, which may be well past it
@@ -83,9 +90,13 @@ public sealed class SignalSmoother(
             if (samples.Count > maxSamples)
                 samples.RemoveRange(0, samples.Count - maxSamples);
 
+            // The blend to the new curve starts from where the value was last shown, or from
+            // this sample if it hasn't been shown recently
+            var blendStart = series.LastShown > oldest ? series.LastShown : time;
+
             // Blend from whatever was being shown, unless this is a discontinuity to show as-is
             var previous = reset ? null : series.Curve;
-            if (previous?.Previous is not null && series.LastShown >= previous.BlendStart + blend)
+            if (previous?.Previous is not null && blendStart >= previous.BlendStart + blend)
             {
                 // The previous blend has finished, so its older curve is no longer needed
                 previous = previous with
@@ -93,11 +104,7 @@ public sealed class SignalSmoother(
                     Previous = null,
                 };
             }
-            series.Curve = Fit(
-                samples,
-                previous,
-                series.LastShown > DateTimeOffset.MinValue ? series.LastShown : time
-            );
+            series.Curve = Fit(samples, previous, blendStart);
         }
     }
 

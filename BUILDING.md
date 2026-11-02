@@ -36,4 +36,8 @@ dotnet run --project gen/Pitwall.CodeGenerator -- schema
 
 # The circuit outlines, corners and pit loss times shipped in Pitwall.Data/Circuits
 dotnet run --project gen/Pitwall.CodeGenerator -- circuits
+
+# The README screenshots in docs/images, rendered from a recorded session at a given lap,
+# optionally following a team (by default the leading one)
+dotnet run --project gen/Pitwall.CodeGenerator -- screenshots ~/.local/share/pitwall/data/2026_Mexico_City_Race 55 "Red Bull Racing"
 ```

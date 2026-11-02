@@ -157,54 +157,89 @@ public sealed class PitWallStrategyDisplay(
     }
 
     /// <summary>
-    /// For each car, (lap, seconds ahead of a car running at the reference pace). The first lap
-    /// has no lap time in the feed, so each car starts from its gap to the leader after lap 1 and
-    /// adds its lap times from there. The reference is the leader's average lap since lap 1, so
-    /// the leader ends near zero.
+    /// For each car, (lap, seconds ahead of a car running at the reference pace).
+    /// <para>
+    /// The time the race leader crossed the line at the end of each lap is built up lap by lap:
+    /// the leader's lap time, plus its gap to whoever led the lap before (zero if it was leading
+    /// already). Each car's time is then the leader's time plus its gap to the leader. Gaps are
+    /// in every lap's snapshot, so this works from whatever lap the data starts at (e.g. a
+    /// recording joined mid-race) and copes with changes of leader. The reference pace is the
+    /// leader's average lap, so the leader ends near zero.
+    /// </para>
     /// </summary>
     private Dictionary<string, List<(double Lap, double Delta)>> RaceTrace()
     {
-        var firstLap = timingData.DriversByLap.GetValueOrDefault(1);
-        if (firstLap is null)
+        var laps = timingData
+            .DriversByLap.Where(x => x.Value.Count > 0)
+            .Select(x => x.Key)
+            .Order()
+            .ToList();
+        if (laps.Count < 2)
             return [];
 
-        // Race time since the leader crossed the line at the end of lap 1
-        var elapsed = new Dictionary<string, List<(int Lap, double Time)>>();
-        foreach (var number in firstLap.Keys)
-        {
-            if (firstLap.SmartGapToLeaderSeconds(number) is { } gap)
-                elapsed[number] = [(1, (double)gap)];
-        }
+        // A normal lap here, to spot laps where the race was stopped
+        var typicalLap = RaceStrategy.Median(
+            laps.SelectMany(lap => timingData.DriversByLap[lap].Values)
+                .Select(x => x.LastLapTime?.ToTimeSpan()?.TotalSeconds ?? 0)
+                .Where(x => x > 0)
+        );
 
-        foreach (var lap in timingData.DriversByLap.Keys.Where(x => x > 1).Order())
+        // When the leader crossed the line at the end of each lap, from the first lap we have,
+        // and the laps the race was stopped on, where gaps don't mean anything
+        var leaderTime = new Dictionary<int, double> { [laps[0]] = 0 };
+        var stoppedLaps = new HashSet<int>();
+        for (var i = 1; i < laps.Count; i++)
         {
-            foreach (var (number, line) in timingData.DriversByLap[lap])
+            var lap = laps[i];
+            var previousLap = laps[i - 1];
+            var lines = timingData.DriversByLap[lap];
+            var leader = lines.FirstOrDefault(x => x.Value.GapToLeaderSeconds() == 0);
+            var lapTime = leader.Value?.LastLapTime?.ToTimeSpan()?.TotalSeconds;
+            var previousGap = leader.Key is null
+                ? null
+                : (double?)timingData.DriversByLap[previousLap].SmartGapToLeaderSeconds(leader.Key);
+
+            if (lap == previousLap + 1 && lapTime is > 0)
             {
-                var time = line.LastLapTime?.ToTimeSpan()?.TotalSeconds;
-                // Only extend a series with consecutive laps, a missed lap would skew it
-                if (
-                    time is > 0
-                    && elapsed.TryGetValue(number, out var series)
-                    && series[^1].Lap == lap - 1
-                )
-                    series.Add((lap, series[^1].Time + time.Value));
+                // A lap that includes a red flag stoppage counts as a normal lap: race traces
+                // leave out neutralised time. Every car shifts equally, so gaps are unaffected.
+                var stopped = lapTime.Value > typicalLap * 1.5;
+                if (stopped)
+                    stoppedLaps.Add(lap);
+                var counted = stopped ? typicalLap : lapTime.Value;
+                leaderTime[lap] = leaderTime[previousLap] + (previousGap ?? 0) + counted;
+            }
+            else
+            {
+                // A gap in the data: carry on with a typical lap time for the missing laps
+                var typical = RaceStrategy.Median(
+                    lines
+                        .Values.Select(x => x.LastLapTime?.ToTimeSpan()?.TotalSeconds ?? 0)
+                        .Where(x => x > 0)
+                );
+                leaderTime[lap] = leaderTime[previousLap] + (typical * (lap - previousLap));
             }
         }
 
-        var leader = timingData.Latest.GetOrderedLines().Keys.FirstOrDefault();
-        var leaderSeries = leader is null ? null : elapsed.GetValueOrDefault(leader);
-        if (leaderSeries is null || leaderSeries.Count < 2)
-            return [];
-        var reference = (leaderSeries[^1].Time - leaderSeries[0].Time) / (leaderSeries[^1].Lap - 1);
+        var first = laps[0];
+        var last = laps[^1];
+        var reference = (leaderTime[last] - leaderTime[first]) / (last - first);
 
-        return elapsed
-            .Where(x => x.Value.Count > 1)
-            .ToDictionary(
-                x => x.Key,
-                x =>
-                    x.Value.Select(p => ((double)p.Lap, ((p.Lap - 1) * reference) - p.Time))
-                        .ToList()
-            );
+        var traces = new Dictionary<string, List<(double Lap, double Delta)>>();
+        foreach (var lap in laps.Where(x => !stoppedLaps.Contains(x)))
+        {
+            var lines = timingData.DriversByLap[lap];
+            foreach (var number in lines.Keys)
+            {
+                if (lines.SmartGapToLeaderSeconds(number) is not { } gap)
+                    continue;
+                var time = leaderTime[lap] + (double)gap;
+                var series = traces.GetValueOrDefault(number) ?? (traces[number] = []);
+                series.Add((lap, ((lap - first) * reference) - time));
+            }
+        }
+
+        return traces.Where(x => x.Value.Count > 1).ToDictionary(x => x.Key, x => x.Value);
     }
 
     /// <summary>The team's cars and the cars directly ahead of and behind each of them.</summary>
@@ -240,7 +275,8 @@ public sealed class PitWallStrategyDisplay(
         }
 
         const int labelColumns = 5;
-        var maxLap = Math.Max(5, traces.Values.Max(x => x[^1].Lap));
+        var minLap = traces.Values.Min(x => x[0].Lap);
+        var maxLap = Math.Max(minLap + 5, traces.Values.Max(x => x[^1].Lap));
         // Scale to the focus cars so the interesting part of the field fills the chart
         var focusValues = traces
             .Where(x => focus.Contains(x.Key))
@@ -252,7 +288,7 @@ public sealed class PitWallStrategyDisplay(
 
         // Leave space on the right for driver labels, and the bottom row for lap numbers
         var plot = new BrailleCanvas(canvas.Columns - labelColumns, canvas.Rows - 1);
-        var rangeX = maxLap;
+        var rangeX = maxLap - minLap;
 
         // Grid: every 10 seconds and every 5 laps
         for (var y = Math.Ceiling(minY / 10) * 10; y <= maxY; y += 10)
@@ -260,9 +296,12 @@ public sealed class PitWallStrategyDisplay(
             var py = (int)Math.Round((1 - ((y - minY) / (maxY - minY))) * (plot.Height - 1));
             plot.HorizontalGuide(py, PitWallTheme.Grid);
         }
-        for (var lap = 5; lap <= maxLap; lap += 5)
+        for (var lap = (int)Math.Ceiling(minLap / 5) * 5; lap <= maxLap; lap += 5)
         {
-            plot.VerticalGuide((int)Math.Round(lap / rangeX * (plot.Width - 1)), PitWallTheme.Grid);
+            plot.VerticalGuide(
+                (int)Math.Round((lap - minLap) / rangeX * (plot.Width - 1)),
+                PitWallTheme.Grid
+            );
         }
 
         // Background cars first, then highlighted cars so they draw on top
@@ -277,7 +316,7 @@ public sealed class PitWallStrategyDisplay(
                 : focus.Contains(number)
                     ? PitWallTheme.TeamColour(context.Driver(number).TeamColour)
                 : new Color(55, 55, 62);
-            plot.Plot(points, 0, maxLap, minY, maxY, colour);
+            plot.Plot(points, minLap, maxLap, minY, maxY, colour);
         }
 
         CopyInto(canvas, plot);
@@ -290,9 +329,9 @@ public sealed class PitWallStrategyDisplay(
         }
 
         // Lap numbers along the bottom
-        for (var lap = 5; lap <= maxLap; lap += 5)
+        for (var lap = (int)Math.Ceiling(minLap / 5) * 5; lap <= maxLap; lap += 5)
         {
-            var column = (int)Math.Round(lap / rangeX * (plot.Width - 1)) / 2;
+            var column = (int)Math.Round((lap - minLap) / rangeX * (plot.Width - 1)) / 2;
             canvas.Label(Math.Max(0, column - 1), canvas.Rows - 1, $"{lap}", PitWallTheme.Dim);
         }
 
@@ -506,12 +545,12 @@ public sealed class PitWallStrategyDisplay(
             ?.OrderBy(x => int.TryParse(x.Key, out var i) ? i : 0)
             .Select(x => x.Value.PitStop)
             .Select(x =>
-                $"[grey]L{x.Lap}[/] lane [bold]{x.PitLaneTime}s[/] stop [bold]{x.PitStopTime}s[/]"
+                $"[grey]L{x.Lap}[/] lane {PitTime(x.PitLaneTime)} stop {PitTime(x.PitStopTime)}"
             )
             .ToList();
         stops ??= pitLaneTimes
             .Latest.PitTimesList.GetValueOrDefault(number)
-            ?.Select(x => $"[grey]L{x.Lap}[/] lane [bold]{x.Duration}s[/]")
+            ?.Select(x => $"[grey]L{x.Lap}[/] lane {PitTime(x.Duration)}")
             .ToList();
 
         return new SingleLine(
@@ -523,6 +562,16 @@ public sealed class PitWallStrategyDisplay(
                 )
         );
     }
+
+    /// <summary>
+    /// A pit lane or stop time in seconds as shown, e.g. <c>22.6s</c>. Times of minutes are cars
+    /// held in the pit lane during a red flag, shown as <c>38:34 red flag</c>.
+    /// </summary>
+    private static string PitTime(string? seconds) =>
+        !double.TryParse(seconds, System.Globalization.CultureInfo.InvariantCulture, out var value)
+            ? $"[bold]{Markup.Escape(seconds ?? "–")}[/]"
+        : value >= 120 ? $"[bold]{TimeSpan.FromSeconds(value):m\\:ss}[/] [grey]red flag[/]"
+        : $"[bold]{value:0.0}s[/]";
 
     /// <summary>The interval to the car ahead, interpolated between feed updates.</summary>
     private double? SmoothInterval(string number, TimingDataPoint.Driver line) =>

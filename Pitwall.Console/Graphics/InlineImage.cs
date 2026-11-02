@@ -25,6 +25,9 @@ public sealed class InlineImage(ITerminalImages images)
 
     public bool Supported => images.Supported;
 
+    /// <summary>Where the image is drawn, in cells, or <c>null</c> when there's no image.</summary>
+    public (int Row, int Column, int Columns, int Rows)? Area { get; private set; }
+
     /// <summary>
     /// How often the page should redraw: as fast as 15 fps, slower if rendering and sending the
     /// image takes a large share of each frame.
@@ -72,6 +75,7 @@ public sealed class InlineImage(ITerminalImages images)
         using var image = render(width, height);
         _sequence = images.Encode(image, columns, rows);
         _position = (row, column);
+        Area = (row, column, columns, rows);
 
         // Smoothed cost of a frame, which sets the frame rate
         var cost = stopwatch.Elapsed.TotalMilliseconds;
@@ -83,6 +87,7 @@ public sealed class InlineImage(ITerminalImages images)
     {
         _sequence = [];
         _previous = [];
+        Area = null;
     }
 
     /// <summary>

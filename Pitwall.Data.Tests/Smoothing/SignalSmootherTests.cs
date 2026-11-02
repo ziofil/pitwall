@@ -101,6 +101,19 @@ public class SignalSmootherTests
     }
 
     [Fact]
+    public void StartsAgainWhenTheClockJumpsBack()
+    {
+        var smoother = Smoother();
+        // A sample far in the future, e.g. processed before a replay set its clock
+        smoother.Add("x", Start.AddDays(1), 20);
+        for (var i = 0; i <= 5; i++)
+            smoother.Add("x", Start.AddSeconds(i), 7 + (i * 0.1));
+
+        Assert.True(smoother.TryGet("x", Start.AddSeconds(5), out var value));
+        Assert.Equal(7.5, value, precision: 3);
+    }
+
+    [Fact]
     public void SingleSampleIsHeld()
     {
         var smoother = Smoother();

@@ -390,7 +390,8 @@ public static class TrackMapRenderer
                 labelFont,
                 unit,
                 placed,
-                alwaysShow: car.Focus
+                alwaysShow: car.Focus,
+                anchor: point
             );
         }
     }
@@ -407,7 +408,8 @@ public static class TrackMapRenderer
         SKFont font,
         float unit,
         List<SKRect> placed,
-        bool alwaysShow
+        bool alwaysShow,
+        SKPoint? anchor = null
     )
     {
         // Size the tag from the letters' actual outline, symmetric around the centre, so the
@@ -415,14 +417,46 @@ public static class TrackMapRenderer
         font.MeasureText(car.Tla, out var ink);
         var halfWidth = (ink.Width / 2f) + (unit * 0.3f);
         var halfHeight = (CapHeight(font) / 2f) + (unit * 0.22f);
-        var bounds = new SKRect(
-            centre.X - halfWidth,
-            centre.Y - halfHeight,
-            centre.X + halfWidth,
-            centre.Y + halfHeight
-        );
-        if (!alwaysShow && placed.Any(x => x.IntersectsWith(bounds)))
-            return;
+        SKRect BoundsAt(SKPoint point) =>
+            new(
+                point.X - halfWidth,
+                point.Y - halfHeight,
+                point.X + halfWidth,
+                point.Y + halfHeight
+            );
+
+        // If the label would overlap one already drawn, try a few spots just above and below.
+        // Labels that must show use the first spot if none is free; others are left out.
+        var candidates = new[] { 0f, 1.4f, -1.4f, 2.8f, -2.8f }
+            .Select(dy => new SKPoint(centre.X, centre.Y + (dy * unit)))
+            .ToList();
+        var free = candidates
+            .Select(point => (Point: point, Bounds: BoundsAt(point)))
+            .FirstOrDefault(x => !placed.Any(p => p.IntersectsWith(x.Bounds)));
+        if (free.Bounds.IsEmpty)
+        {
+            if (!alwaysShow)
+                return;
+            free = (centre, BoundsAt(centre));
+        }
+        // A label moved away from its spot gets a thin line back to its car
+        if (anchor is { } carPoint && free.Point != centre)
+        {
+            using var leader = new SKPaint
+            {
+                Color = SKColor.Parse(car.Colour).WithAlpha(170),
+                IsAntialias = true,
+                StrokeWidth = Math.Max(1f, unit * 0.08f),
+            };
+            var end = new SKPoint(
+                free.Bounds.Left,
+                Math.Clamp(carPoint.Y, free.Bounds.Top, free.Bounds.Bottom)
+            );
+            canvas.DrawLine(carPoint, end, leader);
+        }
+
+        centre = free.Point;
+        var bounds = free.Bounds;
         placed.Add(bounds);
 
         var colour = SKColor.Parse(car.Colour);

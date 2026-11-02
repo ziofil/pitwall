@@ -62,37 +62,16 @@ public abstract class SampleSessionFixture
             .AddSingleton<PitWallCommsDisplay>();
         Services = services.BuildServiceProvider();
 
-        var directory = FindSampleDirectory(session);
-        var timingService = (TimingService)Services.GetRequiredService<ITimingService>();
-        timingService.ProcessSubscriptionData(
-            File.ReadAllText(Path.Join(directory, "subscribe.txt"))
+        var lapCount = Services.GetRequiredService<LapCountProcessor>();
+        SessionReplay.Replay(
+            Services,
+            FindSampleDirectory(session),
+            () => lapCount.Latest.CurrentLap > replayToLap
         );
 
-        var lapCount = Services.GetRequiredService<LapCountProcessor>();
-        var clock = Services.GetRequiredService<IDateTimeProvider>();
-        var last = DateTimeOffset.MinValue;
-        foreach (var line in File.ReadLines(Path.Join(directory, "live.txt")))
-        {
-            if (string.IsNullOrWhiteSpace(line))
-                continue;
-            var (type, data, timestamp) = JsonTimingClient.ProcessLine(line);
-            // Keep the session clock at the message's time, as it is when the app replays it
-            clock.Delay = DateTimeOffset.UtcNow - timestamp;
-            timingService.ProcessData(type, data, timestamp);
-            last = timestamp;
-            if (lapCount.Latest.CurrentLap > replayToLap)
-                break;
-        }
-
-        // The circuit outline is downloaded in the background; give it a moment to arrive.
-        // Without network access the track page shows its "no circuit map" message instead.
-        var sessionInfo = Services.GetRequiredService<SessionInfoProcessor>();
-        for (var i = 0; i < 50 && sessionInfo.Latest.CircuitPoints.Count == 0; i++)
-            Thread.Sleep(100);
-        HasCircuitMap = sessionInfo.Latest.CircuitPoints.Count > 0;
-
-        // Make the session clock read as the time of the last replayed message
-        Services.GetRequiredService<IDateTimeProvider>().Delay = DateTimeOffset.UtcNow - last;
+        // Circuits are shipped with Pitwall, so the map is always there for known circuits
+        HasCircuitMap =
+            Services.GetRequiredService<SessionInfoProcessor>().Latest.CircuitPoints.Count > 0;
     }
 
     /// <summary>

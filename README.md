@@ -3,7 +3,7 @@
 
 **See an F1 session the way a team does.** Pick a team, and Pitwall turns the official live timing feed into a set of pit wall screens built around that team's two cars, in your terminal: the timing monitor, a strategist's view, engineer-style telemetry, a track display and the radio.
 
-![The timing monitor during the 2024 British Grand Prix, following Mercedes](docs/images/timing.png)
+![The timing monitor during the 2026 Mexico City Grand Prix, following Red Bull Racing](docs/images/timing.png)
 
 The layouts follow what you can see of real pit walls: the black FIA timing monitor with its purple, green and yellow sectors, race traces, waveform telemetry, and the lap ring and track map on team screens. Everything is computed from the public live timing feed. Teams' private data, such as tyre temperatures, fuel and energy, isn't available to anyone outside the team, so Pitwall shows what can be worked out from what F1 publishes.
 
@@ -33,17 +33,23 @@ Every page follows the team you picked, and its two cars are marked in the team 
 | `4` | **Track** | A lap ring showing where every car is around the lap, with the latest race control messages inside it, next to the circuit map. Drawn as a real image in terminals that support inline graphics (iTerm2, Kitty, WezTerm, Ghostty and others), and with text characters everywhere else. |
 | `5` | **Comms** | Race control messages coloured by type, with the ones about the team marked, next to the team's radio. Every radio message is transcribed automatically, on your machine, and any of them can be played. |
 
-**Strategy:** the race trace at Silverstone 2024. The field slows as the rain arrives around lap 18, then everyone stops for intermediates around lap 27. The team's cars are in team colour, with the cars around them in their colours and the rest of the field in grey.
+All screenshots are from the 2026 Mexico City Grand Prix, lap 56 of 71, following Red Bull Racing.
 
-![The race trace on the strategy page](docs/images/race-trace.png)
+**Strategy.** The race trace shows the safety car around lap 44, when the field closes up, and the red flag that followed: after the standing restart the gaps reset and the lines converge. Below it, each car's tyres, pace, gaps and their trend, where it would rejoin if it pitted now, and its stops (including the time spent in the pit lane during the red flag).
 
-**Telemetry:** both cars' current lap over the previous one (grey), with the white cursor at each car's position.
+![The strategy page: race trace and both cars' panels](docs/images/strategy.png)
 
-![Telemetry traces for both cars](docs/images/telemetry.png)
+**Telemetry.** Live values and the best speeds through each speed trap, then both cars' current lap drawn over the previous one (grey), with the white cursor at each car's position.
 
-**Track:** where every car is around the lap, and on the circuit.
+![The telemetry page](docs/images/telemetry.png)
+
+**Track.** Where every car is around the lap and on the circuit, with the latest race control messages inside the ring.
 
 ![The track page: lap ring and circuit map](docs/images/track.png)
+
+**Comms.** Race control messages coloured by type, with the ones about the team marked, and the team's radio.
+
+![The comms page](docs/images/comms.png)
 
 A few things worth knowing:
 
