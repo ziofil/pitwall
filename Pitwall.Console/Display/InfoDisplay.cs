@@ -1,9 +1,9 @@
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Options;
-using Spectre.Console;
-using Spectre.Console.Rendering;
 using Pitwall.Console.ExternalPlayerSync;
 using Pitwall.Data;
+using Spectre.Console;
+using Spectre.Console.Rendering;
 
 namespace Pitwall.Console;
 

@@ -2,10 +2,10 @@ using System.Buffers;
 using System.Diagnostics;
 using InhibitSleep.Net;
 using Microsoft.Extensions.Options;
+using Pitwall.Console.Graphics;
 using Spectre.Console;
 using Spectre.Console.Advanced;
 using Spectre.Console.Rendering;
-using Pitwall.Console.Graphics;
 
 namespace Pitwall.Console;
 
@@ -359,6 +359,12 @@ public class ConsoleLoop(
                             );
                             return false;
                         }
+                        return true;
+                    // Shift+Tab ("back tab") is sent as CSI Z
+                    case [(byte)'Z', ..]:
+                        keyChar = '\t';
+                        consoleKey = ConsoleKey.Tab;
+                        modifiers = ConsoleModifiers.Shift;
                         return true;
                     // These are arrow keys on Windows (for some reason, different on mac/linux)
                     case [var key, ..] when key >= 65 && key <= 68:

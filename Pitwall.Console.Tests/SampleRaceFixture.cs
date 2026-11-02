@@ -17,7 +17,8 @@ public sealed class SampleRaceFixture() : SampleSessionFixture("2024_Silverstone
 }
 
 /// <summary>Replays the whole recorded 2024 Imola qualifying session.</summary>
-public sealed class SampleQualifyingFixture() : SampleSessionFixture("2024_Imola_Qualifying", int.MaxValue);
+public sealed class SampleQualifyingFixture()
+    : SampleSessionFixture("2024_Imola_Qualifying", int.MaxValue);
 
 /// <summary>
 /// Replays a recorded session from the repository's sample data up to a set lap, so displays can
@@ -34,13 +35,15 @@ public abstract class SampleSessionFixture
     {
         var configuration = new ConfigurationBuilder().Build();
         var services = new ServiceCollection()
-            .AddSingleton<ILoggerFactory, NullLoggerFactory>()
-            .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
+            .AddLogging(logging => logging.AddProvider(NullLoggerProvider.Instance))
             .AddLiveTiming(configuration)
             .AddSingleton<State>()
             .AddSingleton<PitWallContext>()
             .AddSingleton<PitWallComponents>()
             .Configure<ConsoleOptions>(_ => { })
+            .AddSingleton<Graphics.ITerminalImages, NoTerminalImages>()
+            .AddSingleton<MainMenu>()
+            .AddSingleton<MainDisplay>()
             .AddSingleton<SelectTeamDisplay>()
             .AddSingleton<PitWallTimingDisplay>()
             .AddSingleton<PitWallStrategyDisplay>()
@@ -108,21 +111,20 @@ public abstract class SampleSessionFixture
         var outputDirectory = Environment.GetEnvironmentVariable("PITWALL_RENDER_DIR");
         if (string.IsNullOrWhiteSpace(outputDirectory))
             outputDirectory = Path.Join(AppContext.BaseDirectory, "renders");
-        {
-            Directory.CreateDirectory(outputDirectory);
-            var name = $"{GetType().Name}-{display.Screen}-{width}x{height}";
-            await File.WriteAllTextAsync(Path.Join(outputDirectory, $"{name}.txt"), text);
-            var html = recorder
-                .ExportHtml()
-                .Replace(
-                    "<pre",
-                    "<pre style=\"background:#000;color:#ddd;font-family:Menlo,monospace;font-size:13px;line-height:1.2;margin:0;padding:8px\""
-                );
-            await File.WriteAllTextAsync(
-                Path.Join(outputDirectory, $"{name}.html"),
-                $"<html><body style='margin:0;background:#000'>{html}</body></html>"
+
+        Directory.CreateDirectory(outputDirectory);
+        var name = $"{GetType().Name}-{display.Screen}-{width}x{height}";
+        await File.WriteAllTextAsync(Path.Join(outputDirectory, $"{name}.txt"), text);
+        var html = recorder
+            .ExportHtml()
+            .Replace(
+                "<pre",
+                "<pre style=\"background:#000;color:#ddd;font-family:Menlo,monospace;font-size:13px;line-height:1.2;margin:0;padding:8px\""
             );
-        }
+        await File.WriteAllTextAsync(
+            Path.Join(outputDirectory, $"{name}.html"),
+            $"<html><body style='margin:0;background:#000'>{html}</body></html>"
+        );
 
         return text;
     }
@@ -139,4 +141,16 @@ public abstract class SampleSessionFixture
         }
         throw new DirectoryNotFoundException($"Couldn't find Sample Data/{name}");
     }
+}
+
+/// <summary>A terminal without inline graphics, so pages use their text fallbacks in tests.</summary>
+internal sealed class NoTerminalImages : Graphics.ITerminalImages
+{
+    public bool Supported => false;
+
+    public (int Columns, int Rows) WindowCells => (160, 45);
+
+    public (int Width, int Height) CellsToPixels(int columns, int rows) => (columns * 9, rows * 18);
+
+    public string[] Encode(SkiaSharp.SKImage image, int columns, int rows) => [];
 }

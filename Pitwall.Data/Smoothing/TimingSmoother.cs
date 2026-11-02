@@ -15,10 +15,14 @@ public sealed class TimingSmoother(IDateTimeProvider dateTimeProvider) : IProces
 
     // Gaps change by tenths between loops; a jump of seconds is a pit stop, an incident or a
     // change of car ahead, and should show as a jump.
+    // The feed updates each car's gaps about every 4 seconds (90% within 6), so follow the trend
+    // for up to 6 seconds past the newest update, and ease on to the corrected curve over a
+    // second when the next update arrives.
     private readonly SignalSmoother _smoother = new(
-        window: TimeSpan.FromSeconds(12),
-        maxExtrapolation: TimeSpan.FromSeconds(1.5),
-        resetThreshold: 2.0
+        window: TimeSpan.FromSeconds(30),
+        maxExtrapolation: TimeSpan.FromSeconds(6),
+        resetThreshold: 2.0,
+        blend: TimeSpan.FromSeconds(1)
     );
 
     public TimingDataPoint Latest { get; private set; } = new();
@@ -32,7 +36,11 @@ public sealed class TimingSmoother(IDateTimeProvider dateTimeProvider) : IProces
             if (line.GapToLeader is not null)
                 Record(GapKey(driverNumber), line.GapToLeaderSeconds(), now);
             if (line.IntervalToPositionAhead?.Value is not null)
-                Record(IntervalKey(driverNumber), line.IntervalToPositionAhead.IntervalSeconds(), now);
+                Record(
+                    IntervalKey(driverNumber),
+                    line.IntervalToPositionAhead.IntervalSeconds(),
+                    now
+                );
         }
     }
 
@@ -52,7 +60,9 @@ public sealed class TimingSmoother(IDateTimeProvider dateTimeProvider) : IProces
     }
 
     private double? Get(string key) =>
-        _smoother.TryGet(key, dateTimeProvider.Utc - RenderLag, out var value) ? Math.Max(0, value) : null;
+        _smoother.TryGet(key, dateTimeProvider.Utc - RenderLag, out var value)
+            ? Math.Max(0, value)
+            : null;
 
     private static string GapKey(string driverNumber) => $"{driverNumber}:gap";
 

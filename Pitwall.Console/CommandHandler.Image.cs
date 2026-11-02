@@ -1,6 +1,6 @@
 using System.Diagnostics;
-using SkiaSharp;
 using Pitwall.Console.Graphics;
+using SkiaSharp;
 
 namespace Pitwall.Console;
 

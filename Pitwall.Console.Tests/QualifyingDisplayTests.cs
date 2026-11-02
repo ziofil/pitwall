@@ -42,9 +42,14 @@ public class QualifyingDisplayTests(SampleQualifyingFixture fixture)
     public async Task OtherPagesRender()
     {
         // This recording has no car telemetry or positions, so those pages explain why they're empty
-        Assert.Contains("No car telemetry received yet", await RenderAsync<PitWallTelemetryDisplay>());
         Assert.Contains(
-            fixture.HasCircuitMap ? "No car position data received yet" : "No circuit map available",
+            "No car telemetry received yet",
+            await RenderAsync<PitWallTelemetryDisplay>()
+        );
+        Assert.Contains(
+            fixture.HasCircuitMap
+                ? "No car position data received yet"
+                : "No circuit map available",
             await RenderAsync<PitWallTrackMapDisplay>()
         );
         Assert.Contains("RACE CONTROL", await RenderAsync<PitWallCommsDisplay>());

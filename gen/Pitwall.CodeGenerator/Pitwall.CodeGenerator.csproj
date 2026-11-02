@@ -3,6 +3,8 @@
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
     <SelfContained>true</SelfContained>
+    <!-- A dev tool, not trimmed: the schema library serializes with reflection -->
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../Pitwall.Console/Pitwall.Console.csproj" />

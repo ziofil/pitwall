@@ -1,7 +1,7 @@
-using Spectre.Console;
-using Spectre.Console.Rendering;
 using Pitwall.Console;
 using Pitwall.Data;
+using Spectre.Console;
+using Spectre.Console.Rendering;
 
 public class ManageSessionDisplay(
     ITimingService timingService,

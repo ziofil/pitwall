@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
+using Pitwall.Data;
 using Spectre.Console;
 using Spectre.Console.Rendering;
-using Pitwall.Data;
 
 namespace Pitwall.Console;
 
@@ -33,7 +33,9 @@ public sealed partial class PitWallCommsDisplay(
         PitWallContext context
     ) =>
         teamRadio
-            .Ordered.Where(x => x.Value.RacingNumber is not null && context.IsTeamCar(x.Value.RacingNumber))
+            .Ordered.Where(x =>
+                x.Value.RacingNumber is not null && context.IsTeamCar(x.Value.RacingNumber)
+            )
             .ToList();
 
     public Task<IRenderable> GetContentAsync()
@@ -57,7 +59,11 @@ public sealed partial class PitWallCommsDisplay(
         var flag = message.Flag?.ToUpperInvariant();
 
         if (flag == "RED" || message.Category == "SafetyCar" || text.Contains("SAFETY CAR"))
-            return new Style(foreground: Color.White, background: new Color(200, 0, 0), decoration: Decoration.Bold);
+            return new Style(
+                foreground: Color.White,
+                background: new Color(200, 0, 0),
+                decoration: Decoration.Bold
+            );
         if (flag is "YELLOW" or "DOUBLE YELLOW")
             return new Style(foreground: new Color(255, 255, 0));
         if (flag == "BLUE")
@@ -73,7 +79,9 @@ public sealed partial class PitWallCommsDisplay(
             || text.Contains("STOPPED")
         )
             return new Style(foreground: new Color(255, 51, 255));
-        return flag is "CLEAR" or "GREEN" ? PitWallTheme.Normal : new Style(foreground: new Color(200, 200, 210));
+        return flag is "CLEAR" or "GREEN"
+            ? PitWallTheme.Normal
+            : new Style(foreground: new Color(200, 200, 210));
     }
 
     [GeneratedRegex(@"CARS? (\d+)")]
@@ -84,11 +92,10 @@ public sealed partial class PitWallCommsDisplay(
         if (message.RacingNumber is not null && context.IsTeamCar(message.RacingNumber))
             return true;
         var text = message.Message ?? "";
-        return CarNumbersRegex()
-            .Matches(text)
-            .Any(m => context.IsTeamCar(m.Groups[1].Value))
-            || (context.Team?.DriverNumbers ?? [])
-                .Any(n => text.Contains($"({context.Driver(n).Tla})", StringComparison.OrdinalIgnoreCase));
+        return CarNumbersRegex().Matches(text).Any(m => context.IsTeamCar(m.Groups[1].Value))
+            || (context.Team?.DriverNumbers ?? []).Any(n =>
+                text.Contains($"({context.Driver(n).Tla})", StringComparison.OrdinalIgnoreCase)
+            );
     }
 
     private IRenderable RaceControlPanel()
@@ -104,7 +111,9 @@ public sealed partial class PitWallCommsDisplay(
             ? TimeSpan.Zero
             : TimeSpan.Parse(sessionInfo.Latest.GmtOffset);
 
-        foreach (var message in raceControl.Latest.Messages.Values.OrderByDescending(x => x.Utc).Take(60))
+        foreach (
+            var message in raceControl.Latest.Messages.Values.OrderByDescending(x => x.Utc).Take(60)
+        )
         {
             var aboutTeam = IsAboutTeam(message);
             var style = MessageStyle(message);
@@ -146,16 +155,16 @@ public sealed partial class PitWallCommsDisplay(
 
         // Channel keys, like the radio panels under the pit wall screens: lit when that car has
         // had a message in the last 30 seconds
-        var channels = (team?.DriverNumbers ?? [])
-            .Select(number =>
-            {
-                var driver = context.Driver(number);
-                var latest = captures.FirstOrDefault(x => x.Value.RacingNumber == number).Value;
-                var live = latest?.Utc is { } utc && dateTimeProvider.Utc - utc < TimeSpan.FromSeconds(30);
-                return live
-                    ? $"[bold black on {Led}] {driver.RacingNumber} {driver.Tla} [/]"
-                    : $"[bold {Led} on #200000] {driver.RacingNumber} {driver.Tla} [/]";
-            });
+        var channels = (team?.DriverNumbers ?? []).Select(number =>
+        {
+            var driver = context.Driver(number);
+            var latest = captures.FirstOrDefault(x => x.Value.RacingNumber == number).Value;
+            var live =
+                latest?.Utc is { } utc && dateTimeProvider.Utc - utc < TimeSpan.FromSeconds(30);
+            return live
+                ? $"[bold black on {Led}] {driver.RacingNumber} {driver.Tla} [/]"
+                : $"[bold {Led} on #200000] {driver.RacingNumber} {driver.Tla} [/]";
+        });
         rows.Add(new Markup(string.Join("  ", channels)));
         rows.Add(new Text(""));
 
@@ -188,7 +197,9 @@ public sealed partial class PitWallCommsDisplay(
 
         return new Panel(new Rows(rows))
         {
-            Header = new PanelHeader("[bold] TEAM RADIO [/][grey]▲/▼ select · Enter play · T transcribe [/]"),
+            Header = new PanelHeader(
+                "[bold] TEAM RADIO [/][grey]▲/▼ select · Enter play · T transcribe [/]"
+            ),
             Expand = true,
             BorderStyle = new Style(foreground: PitWallTheme.Grid),
         };

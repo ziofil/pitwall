@@ -12,15 +12,6 @@ namespace Pitwall.Data;
 [JsonSerializable(typeof(RawTimingDataPoint))]
 [JsonSerializable(typeof(CarDataPoint))]
 [JsonSerializable(typeof(CarDataPoint.Entry), TypeInfoPropertyName = "CarDataPoint_Entry")]
-[JsonSerializable(typeof(ChampionshipPredictionDataPoint))]
-[JsonSerializable(
-    typeof(Dictionary<string, ChampionshipPredictionDataPoint.Driver>),
-    TypeInfoPropertyName = "ChampionshipPredictionDataPointDriverDictionary"
-)]
-[JsonSerializable(
-    typeof(ChampionshipPredictionDataPoint.Driver),
-    TypeInfoPropertyName = "ChampionshipPredictionDataPoint_Driver"
-)]
 [JsonSerializable(typeof(DriverListDataPoint))]
 [JsonSerializable(
     typeof(DriverListDataPoint.Driver),

@@ -10,8 +10,6 @@ public class TrackStatusProcessor() : ProcessorBase<TrackStatusDataPoint>();
 
 public class WeatherProcessor() : ProcessorBase<WeatherDataPoint>();
 
-public class ChampionshipPredictionProcessor() : ProcessorBase<ChampionshipPredictionDataPoint>();
-
 public class TimingStatsProcessor() : ProcessorBase<TimingStatsDataPoint>();
 
 public class PitStopSeriesProcessor() : ProcessorBase<PitStopSeriesDataPoint>();

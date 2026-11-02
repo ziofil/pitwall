@@ -21,10 +21,7 @@ public sealed class PitWallContext(
             .GroupBy(x => x.Value.TeamName!)
             .Select(group =>
             {
-                var drivers = group
-                    .Select(x => x.Key)
-                    .OrderBy(Position)
-                    .ToList();
+                var drivers = group.Select(x => x.Key).OrderBy(Position).ToList();
                 var colour = group.First().Value.TeamColour ?? "FFFFFF";
                 return new PitWallTeam(group.Key, colour, drivers);
             })
@@ -34,19 +31,20 @@ public sealed class PitWallContext(
     /// <summary>The selected team, or <c>null</c> if none is selected or it isn't in this session.</summary>
     public PitWallTeam? Team => Teams.FirstOrDefault(x => x.Name == state.SelectedTeam);
 
-    public bool IsTeamCar(string driverNumber) => Team?.DriverNumbers.Contains(driverNumber) ?? false;
+    public bool IsTeamCar(string driverNumber) =>
+        Team?.DriverNumbers.Contains(driverNumber) ?? false;
 
     public DriverListDataPoint.Driver Driver(string? driverNumber) =>
         (driverNumber is null ? null : driverList.Latest.GetValueOrDefault(driverNumber)) ?? new();
 
-    /// <summary>Selects the next team in the list, wrapping around.</summary>
-    public void CycleTeam()
+    /// <summary>Selects the next (or with -1, previous) team in the list, wrapping around.</summary>
+    public void CycleTeam(int direction = 1)
     {
         var teams = Teams;
         if (teams.Count == 0)
             return;
         var index = teams.ToList().FindIndex(x => x.Name == state.SelectedTeam);
-        var next = (index + 1) % teams.Count;
+        var next = (((index + direction) % teams.Count) + teams.Count) % teams.Count;
         state.SelectedTeam = teams[next].Name;
     }
 

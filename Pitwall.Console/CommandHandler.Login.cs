@@ -1,5 +1,5 @@
-using Spectre.Console;
 using Pitwall.Data;
+using Spectre.Console;
 
 namespace Pitwall.Console;
 
@@ -35,15 +35,14 @@ public static partial class CommandHandler
         }
 
         var preamble = $"""
-            Login to your Formula 1 Account (which has any level of F1 TV subscription) to access all the Live Timing feeds and unlock all features of pitwall.
+            Log in to your Formula 1 account (with any level of F1 TV subscription) to receive all the live timing feeds.
 
-            An account is [bold]NOT[/] needed for pitwall to function, it only unlocks the following features:
-            - Driver Tracker (live position of cars on track)
-            - Pit Stop times
-            - Championship tables with live prediction
-            - DRS active indicator on Timing Screen
+            An account is [bold]not[/] needed to use Pitwall. During live sessions it adds:
+            - car positions on the Track page
+            - car telemetry on the Telemetry page
+            - pit stop times
 
-            Additionally, logging in is [bold]NOT[/] required for the above features if you import data for already completed sessions, as all data feeds are available after a session is complete.
+            Replays of finished sessions include all of this without logging in.
 
             Once logged in, your access token will be stored in [bold]{ConsoleOptions.ConfigFilePath}[/]. Your actual account credentials will not be stored anywhere.
             Simply remove the token entry from this file, or run [bold]pitwall logout[/] to remove usage of your token.

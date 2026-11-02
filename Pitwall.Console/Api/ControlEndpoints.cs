@@ -42,7 +42,7 @@ public static class ControlEndpoints
 
         app.MapPost("/control", ControlApiEndpoint)
             .WithDescription(
-                "Issues control commands to the currently running session. These commands allow you to, for example, start or stop the session clock to synchronize your timing screen with another service"
+                "Issues control commands to the currently running session. These commands allow you to, for example, start or stop the session clock to synchronize the pit wall with another service"
             )
             .WithTags("Control")
             .Produces<ControlResponse>(StatusCodes.Status200OK)

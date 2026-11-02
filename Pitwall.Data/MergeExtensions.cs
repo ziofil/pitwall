@@ -118,15 +118,4 @@ internal static partial class MergeExtensions
 
     public static DateTime? MergeWith(this DateTime? src, DateTime? other) =>
         other is not null ? other : src;
-
-    public static T? MergeClasses<T>(T? src, T? other)
-        where T : IMergeable<T>
-    {
-        if (other is null)
-            return src;
-        if (src is null)
-            return src;
-        src.MergeWith(other);
-        return src;
-    }
 }

@@ -41,7 +41,9 @@ public sealed class PlayTeamRadioInputHandler(
     private async Task PlayAsync(int offset, CancellationToken cancellationToken = default)
     {
         // The comms page only lists the selected team's radio
-        var radio = PitWallCommsDisplay.TeamCaptures(teamRadio, pitWallContext).ElementAtOrDefault(offset);
+        var radio = PitWallCommsDisplay
+            .TeamCaptures(teamRadio, pitWallContext)
+            .ElementAtOrDefault(offset);
         if (radio.Key is null)
             return;
         var destFileName = await teamRadio.DownloadTeamRadioToFileAsync(

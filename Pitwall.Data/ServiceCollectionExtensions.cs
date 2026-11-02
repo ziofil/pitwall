@@ -29,6 +29,7 @@ public static partial class ServiceCollectionExtensions
             .AddSingleton<Formula1Account>()
             .AddSingleton<IDataImporter, DataImporter>();
 
+        // For F1's own endpoints only: it carries the F1 account token
         collection.AddHttpClient(
             "Default",
             (serviceProvider, options) =>
@@ -45,17 +46,14 @@ public static partial class ServiceCollectionExtensions
             }
         );
 
+        // For everything else (e.g. the GitHub update check), so the F1 token is never sent there
         collection.AddHttpClient(
-            "Proxy",
+            "Public",
             options =>
-            {
                 options.DefaultRequestHeaders.Add(
                     "User-Agent",
                     $"pitwall/{ThisAssembly.AssemblyInformationalVersion}"
-                );
-                options.DefaultRequestHeaders.ConnectionClose = true;
-                options.BaseAddress = new Uri("https://undercutf1.amandhoot.com");
-            }
+                )
         );
 
         return collection;

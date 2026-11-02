@@ -1,5 +1,5 @@
-using Spectre.Console;
 using Pitwall.Data;
+using Spectre.Console;
 
 namespace Pitwall.Console;
 
@@ -31,8 +31,11 @@ public static class PitWallTheme
         string.IsNullOrWhiteSpace(hex) ? Text : Color.FromHex(hex.TrimStart('#'));
 
     /// <summary>Style for a lap or sector time following the timing monitor colour conventions.</summary>
-    public static Style TimeStyle(TimingDataPoint.Driver.LapSectorTime? time, bool improvedOnly = false)
-        => time switch
+    public static Style TimeStyle(
+        TimingDataPoint.Driver.LapSectorTime? time,
+        bool improvedOnly = false
+    ) =>
+        time switch
         {
             null => Dim,
             _ when string.IsNullOrWhiteSpace(time.Value) => Dim,
@@ -55,11 +58,17 @@ public static class PitWallTheme
 
     /// <summary>Formats a number of seconds as a signed gap, e.g. <c>+1.234</c>.</summary>
     public static string Gap(double? seconds, int decimals = 3) =>
-        seconds is null ? "" : seconds.Value.ToString((seconds.Value >= 0 ? "+" : "") + "0." + new string('0', decimals));
+        seconds is null
+            ? ""
+            : seconds.Value.ToString(
+                (seconds.Value >= 0 ? "+" : "") + "0." + new string('0', decimals)
+            );
 
     /// <summary>Formats a number of seconds as a lap time, e.g. <c>1:31.234</c>.</summary>
     public static string LapTime(double? seconds) =>
         seconds is null
             ? ""
-            : TimeSpan.FromSeconds(seconds.Value).ToString(seconds.Value >= 60 ? @"m\:ss\.fff" : @"ss\.fff");
+            : TimeSpan
+                .FromSeconds(seconds.Value)
+                .ToString(seconds.Value >= 60 ? @"m\:ss\.fff" : @"ss\.fff");
 }

@@ -1,10 +1,10 @@
 using System.CommandLine;
 using InMemLogger;
-using Serilog;
-using Serilog.Events;
 using Pitwall.Console.ExternalPlayerSync;
 using Pitwall.Console.Graphics;
 using Pitwall.Data;
+using Serilog;
+using Serilog.Events;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
 
 namespace Pitwall.Console;
@@ -174,7 +174,7 @@ public static partial class CommandHandler
         var loginCommand = new Command(
             "login",
             """
-            Login to your Formula 1 account to unlock all data feeds (like the driver tracker).
+            Log in to your Formula 1 account to receive all live data feeds (car positions, telemetry, pit stop times).
             """
         )
         {

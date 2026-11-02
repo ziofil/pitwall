@@ -13,6 +13,8 @@ public static partial class ServiceCollectionExtensions
         services.AddDisplaysCore();
 
         services.AddSingleton<PitWallContext>();
+        services.AddSingleton<MainMenu>();
+        services.AddSingleton<Graphics.ITerminalImages, Graphics.TerminalImages>();
         services.AddSingleton<PitWallComponents>();
         services.AddSingleton<LogDisplayOptions>();
         services.AddSingleton<StartSimulatedSessionOptions>();

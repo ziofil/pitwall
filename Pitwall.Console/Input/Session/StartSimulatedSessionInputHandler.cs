@@ -46,7 +46,9 @@ public class StartSimulatedSessionInputHandler(
                     selected.ElementAt(state.CursorOffset).Directory
                 );
                 // Go straight to the pit wall, asking for a team first if none is chosen yet
-                state.CurrentScreen = state.SelectedTeam is null ? Screen.SelectTeam : Screen.PitWallTiming;
+                state.CurrentScreen = state.SelectedTeam is null
+                    ? Screen.SelectTeam
+                    : Screen.PitWallTiming;
                 state.CursorOffset = 0;
             }
         }

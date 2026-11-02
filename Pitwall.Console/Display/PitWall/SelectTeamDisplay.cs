@@ -1,6 +1,6 @@
+using Pitwall.Data;
 using Spectre.Console;
 using Spectre.Console.Rendering;
-using Pitwall.Data;
 
 namespace Pitwall.Console;
 
@@ -21,7 +21,7 @@ public sealed class SelectTeamDisplay(
             return Task.FromResult<IRenderable>(
                 new Panel(
                     new Markup(
-                        "[yellow]No teams found yet.[/] Start a live or recorded session first (press [bold]Esc[/], then [bold]S[/])."
+                        "[yellow]Waiting for the session's teams…[/] If no session is running, press [bold]Esc[/] and choose [bold]Watch a live session[/] or [bold]Replay a session[/]."
                     )
                 )
                 {
@@ -53,7 +53,7 @@ public sealed class SelectTeamDisplay(
                 {
                     var driver = context.Driver(number);
                     var line = timingData.Latest.Lines.GetValueOrDefault(number);
-                    return $"P{line?.Line,-2} [bold]{driver.RacingNumber,2} {driver.Tla}[/] [grey]{Markup.Escape(driver.FullName ?? "")}[/]";
+                    return $"P{line?.Line, -2} [bold]{driver.RacingNumber, 2} {driver.Tla}[/] [grey]{Markup.Escape(driver.FullName ?? "")}[/]";
                 })
             );
 

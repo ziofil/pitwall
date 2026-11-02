@@ -33,7 +33,7 @@ public class EscapeInputHandler(State state) : IInputHandler
         state.CurrentScreen = state.CurrentScreen switch
         {
             Screen.Main => Screen.Shutdown,
-            Screen.StartSimulatedSession => Screen.ManageSession,
+            Screen.StartSimulatedSession => Screen.Main,
             Screen.DownloadTranscriptionModel => Screen.PitWallComms,
             Screen.SelectTeam
                 when PitWallComponents.Pages.Any(x => x.Screen == state.PreviousScreen) =>

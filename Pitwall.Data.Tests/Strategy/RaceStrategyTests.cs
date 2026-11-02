@@ -73,6 +73,21 @@ public class RaceStrategyTests
     }
 
     [Fact]
+    public void PitLossUsesTheCircuitValueBeforeAnyStops()
+    {
+        var laps = Laps("1", [95, 90, 90, 90]);
+        var circuit = new PitLossTimes(20.8, 13.5, 14.3);
+
+        var estimate = RaceStrategy.EstimatePitLoss(laps, circuit);
+
+        Assert.Equal(PitLossSource.Circuit, estimate.Source);
+        Assert.Equal(20.8, estimate.Seconds);
+        Assert.Equal(13.5, RaceStrategy.ForTrackStatus(estimate, circuit, "4").Seconds);
+        Assert.Equal(14.3, RaceStrategy.ForTrackStatus(estimate, circuit, "6").Seconds);
+        Assert.Equal(20.8, RaceStrategy.ForTrackStatus(estimate, circuit, "1").Seconds);
+    }
+
+    [Fact]
     public void RejoinPredictionPlacesCarBetweenTheRightRivals()
     {
         var lines = new Dictionary<string, TimingDataPoint.Driver>
@@ -100,14 +115,30 @@ public class RaceStrategyTests
     {
         var laps = new Dictionary<int, Dictionary<string, TimingDataPoint.Driver>>
         {
-            [1] = new() { ["1"] = new() { Line = 1, GapToLeader = "LAP 1" }, ["2"] = new() { Line = 2, GapToLeader = "+3.0" } },
-            [2] = new() { ["1"] = new() { Line = 1, GapToLeader = "LAP 2" }, ["2"] = new() { Line = 2, GapToLeader = "+2.5" } },
-            [3] = new() { ["1"] = new() { Line = 1, GapToLeader = "LAP 3" }, ["2"] = new() { Line = 2, GapToLeader = "+2.0" } },
+            [1] = new()
+            {
+                ["1"] = new() { Line = 1, GapToLeader = "LAP 1" },
+                ["2"] = new() { Line = 2, GapToLeader = "+3.0" },
+            },
+            [2] = new()
+            {
+                ["1"] = new() { Line = 1, GapToLeader = "LAP 2" },
+                ["2"] = new() { Line = 2, GapToLeader = "+2.5" },
+            },
+            [3] = new()
+            {
+                ["1"] = new() { Line = 1, GapToLeader = "LAP 3" },
+                ["2"] = new() { Line = 2, GapToLeader = "+2.0" },
+            },
         };
 
         var history = RaceStrategy.GetGapHistory(laps, "1", "2", laps: 2);
 
         Assert.Equal([(2, 2.5), (3, 2.0)], history);
-        Assert.Equal(-0.5, RaceStrategy.Slope(history.Select(x => ((double)x.Lap, x.Gap)).ToList())!.Value, precision: 3);
+        Assert.Equal(
+            -0.5,
+            RaceStrategy.Slope(history.Select(x => ((double)x.Lap, x.Gap)).ToList())!.Value,
+            precision: 3
+        );
     }
 }

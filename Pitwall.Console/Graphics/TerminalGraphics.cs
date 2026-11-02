@@ -19,7 +19,7 @@ public static class TerminalGraphics
     private const string ESCAPE_ST = "\e\\"; // String Terminator
 
     private static readonly string EncodedFileName = Convert.ToBase64String(
-        Encoding.ASCII.GetBytes("drivertracker.png")
+        Encoding.ASCII.GetBytes("pitwall.png")
     );
 
     /// <summary>

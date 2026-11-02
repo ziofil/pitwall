@@ -1,44 +1,13 @@
-name: Package and Publish Executables
+name: Release Executables
 
+# Builds standalone executables (no .NET install needed) and attaches them to the GitHub release.
+# Run it by hand from the Actions tab to get the executables as build artifacts without a release.
 on:
   release:
     types: [created]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
-  build-nuget-tool:
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: write
-      # GitHub OIDC token issuance for publishing the NuGet
-      id-token: write
-
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 10.0.x
-      - name: Restore dependencies
-        run: dotnet restore
-      - name: Pack
-        # No point in having the NuGet tool be AOT, we know theres a dotnet runtime on the machine if they have the tool
-        run: dotnet pack --no-restore /p:PublicRelease=true /p:PublishAot=false
-      
-      - name: NuGet login (OIDC → temp API key)
-        if: ${{ github.event_name == 'release'}}
-        uses: NuGet/login@v1
-        id: login
-        with:
-          user: ${{ secrets.NUGET_USER }}
-
-      - name: Push Packages
-        if: ${{ github.event_name == 'release'}}
-        run: dotnet nuget push "**/*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --skip-duplicate
-
   build-executable:
     permissions:
       contents: write
@@ -63,95 +32,29 @@ jobs:
           fetch-depth: 0
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
       - name: Restore dependencies
         run: dotnet restore
 
-      - name: Create ${{ matrix.target }} Package
+      - name: Build ${{ matrix.target }} executable
         run: dotnet publish -r ${{ matrix.target }} -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:IncludeAllContentForSelfExtract=true -p:PublicRelease=true Pitwall.Console/Pitwall.Console.csproj -o ${{ matrix.target }}-output
 
-      - name: Download codesign certificate
-        if: ${{ contains(matrix.target, 'osx') && github.event_name == 'release' }}
-        env:
-          MAC_CODESIGN_CERT: ${{ secrets.MAC_CODESIGN_CERT }}
-        run: |
-          echo $MAC_CODESIGN_CERT | base64 --decode > certificate.p12
-
-      - name: Sign Executable
-        uses: indygreg/apple-code-sign-action@v1
-        if: ${{ contains(matrix.target, 'osx') && github.event_name == 'release' }}
-        with:
-          input_path: ${{ matrix.target }}-output/pitwall
-          p12_file: certificate.p12
-          p12_password: ${{ secrets.MAC_CODESIGN_PASSWORD }}
-
-      - name: Upload ${{ matrix.target }} to Release
+      - name: Attach ${{ matrix.target }} to the release
         uses: svenstaro/upload-release-action@v2
-        if: ${{ github.event_name == 'release'}}
+        if: ${{ github.event_name == 'release' }}
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: ${{ matrix.target }}-output/${{ contains(matrix.target, 'win') && 'pitwall.exe' || 'pitwall'}}
-          asset_name: pitwall-${{ matrix.target }}${{ contains(matrix.target, 'win') && '.exe' || ''}}
+          file: ${{ matrix.target }}-output/${{ contains(matrix.target, 'win') && 'pitwall.exe' || 'pitwall' }}
+          asset_name: pitwall-${{ matrix.target }}${{ contains(matrix.target, 'win') && '.exe' || '' }}
           tag: ${{ github.ref }}
 
-      - name: Upload ${{ matrix.target }} to Pull Request
+      - name: Upload ${{ matrix.target }} as a build artifact
         uses: actions/upload-artifact@v7
-        if: ${{ github.event_name == 'pull_request'}}
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         with:
-          name: pitwall-${{ matrix.target }}${{ contains(matrix.target, 'win') && '.exe' || ''}}
-          path: ${{ matrix.target }}-output/${{ contains(matrix.target, 'win') && 'pitwall.exe' || 'pitwall'}}
+          name: pitwall-${{ matrix.target }}${{ contains(matrix.target, 'win') && '.exe' || '' }}
+          path: ${{ matrix.target }}-output/${{ contains(matrix.target, 'win') && 'pitwall.exe' || 'pitwall' }}
           overwrite: true
-
-  build-docker-image:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: 10.0.x
-
-      - run: dotnet tool restore
-
-      - uses: dotnet/nbgv@master
-        id: nbgv
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v4
-        # Only release builds and PRs submitted in the repository itself are allowed to login, as they're the only onces with secret permissions
-        if: ${{ github.actor != 'dependabot[bot]' && (github.event_name == 'release' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Build and push
-        if: ${{ github.event_name == 'release'}}
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ziofil/pitwall:latest,ziofil/pitwall:${{ steps.nbgv.outputs.SemVer2 }}
-
-      - name: Build and push
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          # Don't push dependabot builds to Dockerhub
-          push: ${{ github.actor != 'dependabot[bot]' && github.event.pull_request.head.repo.full_name == github.repository }}
-          tags: ziofil/pitwall:${{ steps.nbgv.outputs.SemVer2 }}

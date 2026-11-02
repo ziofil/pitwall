@@ -9,7 +9,11 @@ namespace Pitwall.Console.Tests;
 /// </summary>
 public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<SampleRaceFixture>
 {
-    private async Task<string> RenderAsync<T>(string team = "Mercedes", int width = 160, int height = 45)
+    private async Task<string> RenderAsync<T>(
+        string team = "Mercedes",
+        int width = 160,
+        int height = 45
+    )
         where T : IDisplay
     {
         var state = fixture.Services.GetRequiredService<State>();
@@ -18,6 +22,22 @@ public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<Samp
         state.CurrentScreen = display.Screen;
         state.CursorOffset = 0;
         return await fixture.RenderAsync(display, width, height);
+    }
+
+    [Fact]
+    public async Task LaunchScreenShowsTheMenu()
+    {
+        var text = await RenderAsync<MainDisplay>();
+
+        Assert.Contains("██████╗", text);
+        Assert.Contains("Open the pit wall", text);
+        Assert.Contains("Replay a session", text);
+        Assert.Contains("Quit", text);
+        Assert.DoesNotContain(
+            "undercut",
+            text.Replace("a fork of undercut-f1", ""),
+            StringComparison.OrdinalIgnoreCase
+        );
     }
 
     [Fact]
@@ -54,6 +74,7 @@ public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<Samp
         Assert.Contains("PIT NOW", text);
         Assert.Contains("UNDERCUT", text);
         Assert.Contains("PIT LOSS", text);
+        Assert.Contains("STOPS", text);
     }
 
     [Fact]
@@ -64,6 +85,8 @@ public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<Samp
         Assert.Contains("Waveform · 44 HAM", text);
         Assert.Contains("Waveform · 63 RUS", text);
         Assert.Contains("vCar", text);
+        Assert.Contains("Best speeds", text);
+        Assert.Contains("kph P", text);
         Assert.Contains("nEngine", text);
     }
 
@@ -83,6 +106,29 @@ public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<Samp
     }
 
     [Fact]
+    public void TrackImageRendersTheRingAndCircuit()
+    {
+        var display = fixture.Services.GetRequiredService<PitWallTrackMapDisplay>();
+        fixture.Services.GetRequiredService<State>().SelectedTeam = "Mercedes";
+        var scene = display.CurrentScene();
+        if (scene is null)
+        {
+            Assert.False(fixture.HasCircuitMap);
+            return;
+        }
+
+        using var image = TrackMapRenderer.Render(scene, 1440, 780);
+        Assert.Equal(1440, image.Width);
+        Assert.Contains(scene.Cars, x => x.TeamCar);
+
+        // Saved next to the other renders, for looking at
+        var directory = Path.Join(AppContext.BaseDirectory, "renders");
+        Directory.CreateDirectory(directory);
+        using var data = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
+        File.WriteAllBytes(Path.Join(directory, "TrackImage.png"), data.ToArray());
+    }
+
+    [Fact]
     public async Task CommsPageShowsRaceControlAndTeamRadio()
     {
         var text = await RenderAsync<PitWallCommsDisplay>();
@@ -92,18 +138,49 @@ public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<Samp
         Assert.Contains("44 HAM", text);
     }
 
+    [Theory]
+    [InlineData(80)]
+    [InlineData(90)]
+    [InlineData(100)]
+    [InlineData(120)]
+    [InlineData(140)]
+    [InlineData(200)]
+    public async Task TimingColumnsLineUpWithTheirHeaders(int width)
+    {
+        var text = await RenderAsync<PitWallTimingDisplay>(width: width, height: 30);
+        var lines = text.Split('\n');
+        var header = lines.First(x => x.Contains("POS"));
+        var hamilton = lines.First(x => x.Contains("HAMILTON"));
+
+        // Each value ends in the same column as its right-aligned header
+        foreach (var column in new[] { "LAPS", "PIT" })
+        {
+            var end = header.IndexOf(column, StringComparison.Ordinal) + column.Length;
+            Assert.True(
+                end <= hamilton.Length && hamilton[end - 1] != ' ',
+                $"{column} misaligned at width {width}:\n{header}\n{hamilton}"
+            );
+        }
+        Assert.Equal(
+            header.IndexOf("DRIVER", StringComparison.Ordinal),
+            hamilton.IndexOf("L. HAMILTON", StringComparison.Ordinal)
+        );
+    }
+
     [Fact]
     public async Task PagesRenderInASmallTerminal()
     {
         // Mostly checks nothing throws when the space is tight
-        foreach (var render in new Func<Task<string>>[]
-        {
-            () => RenderAsync<PitWallTimingDisplay>(width: 80, height: 24),
-            () => RenderAsync<PitWallStrategyDisplay>(width: 80, height: 24),
-            () => RenderAsync<PitWallTelemetryDisplay>(width: 80, height: 24),
-            () => RenderAsync<PitWallTrackMapDisplay>(width: 80, height: 24),
-            () => RenderAsync<PitWallCommsDisplay>(width: 80, height: 24),
-        })
+        foreach (
+            var render in new Func<Task<string>>[]
+            {
+                () => RenderAsync<PitWallTimingDisplay>(width: 80, height: 24),
+                () => RenderAsync<PitWallStrategyDisplay>(width: 80, height: 24),
+                () => RenderAsync<PitWallTelemetryDisplay>(width: 80, height: 24),
+                () => RenderAsync<PitWallTrackMapDisplay>(width: 80, height: 24),
+                () => RenderAsync<PitWallCommsDisplay>(width: 80, height: 24),
+            }
+        )
         {
             Assert.NotEmpty(await render());
         }
@@ -118,12 +195,12 @@ public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<Samp
 
         foreach (var (number, line) in timing.Latest.Lines)
         {
-            if (line.GapToLeaderSeconds() is not > 0 || line.Retired == true)
+            if (line.GapToLeaderSeconds() is not { } raw || raw <= 0 || line.Retired == true)
                 continue;
             var smoothed = smoother.GapToLeader(number);
             Assert.NotNull(smoothed);
             // Smoothed values lag slightly behind and interpolate, so they differ by tenths at most
-            Assert.InRange(smoothed.Value, (double)line.GapToLeaderSeconds()!.Value - 1.5, (double)line.GapToLeaderSeconds()!.Value + 1.5);
+            Assert.InRange(smoothed!.Value, (double)raw - 1.5, (double)raw + 1.5);
             compared++;
         }
 

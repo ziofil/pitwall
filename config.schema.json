@@ -38,7 +38,7 @@
     },
     "preventDisplaySleep": {
       "type": "boolean",
-      "description": "Whwther the app should try to prevent the display from turning off/sleeping whilst running.\nThis is similar to running \u003Cc\u003Ecaffeinate -d pitwall\u003C/c\u003E on macOS."
+      "description": "Whether the app should try to prevent the display from turning off/sleeping whilst running.\nThis is similar to running \u003Cc\u003Ecaffeinate -d pitwall\u003C/c\u003E on macOS."
     },
     "enablePositionSmoothing": {
       "type": "boolean",

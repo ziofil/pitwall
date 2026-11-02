@@ -1,6 +1,6 @@
+using Pitwall.Data;
 using Spectre.Console;
 using Spectre.Console.Rendering;
-using Pitwall.Data;
 
 namespace Pitwall.Console;
 
@@ -16,7 +16,10 @@ public sealed class PitWallStrategyDisplay(
     TimingDataProcessor timingData,
     TimingAppDataProcessor timingAppData,
     TimingSmoother smoother,
-    SessionInfoProcessor sessionInfo
+    SessionInfoProcessor sessionInfo,
+    TrackStatusProcessor trackStatus,
+    PitStopSeriesProcessor pitStops,
+    PitLaneTimeCollectionProcessor pitLaneTimes
 ) : IDisplay
 {
     /// <summary>A rival within this many seconds could gain the place with an earlier stop.</summary>
@@ -39,19 +42,34 @@ public sealed class PitWallStrategyDisplay(
             );
         }
 
-        var pitLoss = RaceStrategy.EstimatePitLoss(timingData.DriversByLap);
+        var circuitPitLoss = sessionInfo.Latest.PitLoss;
+        var pitLoss = RaceStrategy.ForTrackStatus(
+            RaceStrategy.EstimatePitLoss(timingData.DriversByLap, circuitPitLoss),
+            circuitPitLoss,
+            trackStatus.Latest?.Status
+        );
         var lines = timingData.Latest.GetOrderedLines();
 
         var cars = new Layout("Cars").SplitColumns(
-            team.DriverNumbers.Select(number => new Layout(number, CarPanel(number, lines, pitLoss)))
+            team.DriverNumbers.Select(number => new Layout(
+                    number,
+                    CarPanel(number, lines, pitLoss)
+                ))
                 .ToArray()
         );
 
         var notes = new SingleLine(
             $"[grey]PIT LOSS[/] [bold]{pitLoss.Seconds:0.0}s[/] "
-                + (pitLoss.IsDefault
-                    ? "[grey](default, no stops seen yet)[/]"
-                    : $"[grey](median of {pitLoss.Samples} stops)[/]")
+                + pitLoss.Source switch
+                {
+                    PitLossSource.Observed => $"[grey](median of {pitLoss.Samples} stops)[/]",
+                    PitLossSource.Circuit => "[grey](circuit typical, no stops seen yet)[/]",
+                    PitLossSource.SafetyCar =>
+                        "[black on #ffe600] SAFETY CAR [/] [grey]cheaper stop[/]",
+                    PitLossSource.VirtualSafetyCar =>
+                        "[black on #ffe600] VSC [/] [grey]cheaper stop[/]",
+                    _ => "[grey](generic, no stops or circuit data)[/]",
+                }
                 + "[grey]  ·  REJOIN assumes no other car stops  ·  UNDERCUT RANGE[/] "
                 + $"[bold]{UndercutRangeSeconds:0.0}s[/]"
         );
@@ -59,7 +77,7 @@ public sealed class PitWallStrategyDisplay(
         var body = new Layout("Strategy").SplitRows(
             new Layout("Trace", RaceTracePanel(team)),
             // Nine rows of detail per car, plus the panel border
-            new Layout("Cars", cars).Size(11),
+            new Layout("Cars", cars).Size(12),
             new Layout("Notes", notes).Size(1)
         );
 
@@ -82,7 +100,10 @@ public sealed class PitWallStrategyDisplay(
         var focus = FocusCars(team);
 
         return new Panel(
-            new CanvasRenderable(canvas => DrawRaceTrace(canvas, traces, focus, team), defaultRows: 16)
+            new CanvasRenderable(
+                canvas => DrawRaceTrace(canvas, traces, focus, team),
+                defaultRows: 16
+            )
         )
         {
             Header = new PanelHeader(
@@ -120,7 +141,11 @@ public sealed class PitWallStrategyDisplay(
             {
                 var time = line.LastLapTime?.ToTimeSpan()?.TotalSeconds;
                 // Only extend a series with consecutive laps, a missed lap would skew it
-                if (time is > 0 && elapsed.TryGetValue(number, out var series) && series[^1].Lap == lap - 1)
+                if (
+                    time is > 0
+                    && elapsed.TryGetValue(number, out var series)
+                    && series[^1].Lap == lap - 1
+                )
                     series.Add((lap, series[^1].Time + time.Value));
             }
         }
@@ -135,7 +160,9 @@ public sealed class PitWallStrategyDisplay(
             .Where(x => x.Value.Count > 1)
             .ToDictionary(
                 x => x.Key,
-                x => x.Value.Select(p => ((double)p.Lap, ((p.Lap - 1) * reference) - p.Time)).ToList()
+                x =>
+                    x.Value.Select(p => ((double)p.Lap, ((p.Lap - 1) * reference) - p.Time))
+                        .ToList()
             );
     }
 
@@ -198,13 +225,17 @@ public sealed class PitWallStrategyDisplay(
         }
 
         // Background cars first, then highlighted cars so they draw on top
-        foreach (var (number, points) in traces.OrderBy(x => focus.Contains(x.Key)).ThenBy(x => context.IsTeamCar(x.Key)))
+        foreach (
+            var (number, points) in traces
+                .OrderBy(x => focus.Contains(x.Key))
+                .ThenBy(x => context.IsTeamCar(x.Key))
+        )
         {
-            var colour = context.IsTeamCar(number)
-                ? PitWallTheme.TeamColour(team.Colour)
+            var colour =
+                context.IsTeamCar(number) ? PitWallTheme.TeamColour(team.Colour)
                 : focus.Contains(number)
                     ? PitWallTheme.TeamColour(context.Driver(number).TeamColour)
-                    : new Color(55, 55, 62);
+                : new Color(55, 55, 62);
             plot.Plot(points, 0, maxLap, minY, maxY, colour);
         }
 
@@ -286,9 +317,8 @@ public sealed class PitWallStrategyDisplay(
         // Tyre and stint
         var app = timingAppData.Latest.Lines.GetValueOrDefault(number);
         var stint = app?.Stints.OrderBy(x => int.Parse(x.Key)).LastOrDefault().Value;
-        var stintStartLap = app is null || stint is null
-            ? 0
-            : (line.NumberOfLaps ?? 0) - stint.GetStintDuration();
+        var stintStartLap =
+            app is null || stint is null ? 0 : (line.NumberOfLaps ?? 0) - stint.GetStintDuration();
         rows.Add(
             new SingleLine(
                 $"[grey]TYRE  [/] {PitWallTheme.CompoundMarkup(stint?.Compound)} "
@@ -299,9 +329,15 @@ public sealed class PitWallStrategyDisplay(
         );
 
         // Pace and degradation over the current stint
-        var stintLaps = RaceStrategy.GetCleanLaps(timingData.DriversByLap, number, stintStartLap + 1);
+        var stintLaps = RaceStrategy.GetCleanLaps(
+            timingData.DriversByLap,
+            number,
+            stintStartLap + 1
+        );
         var lastFive = stintLaps.TakeLast(5).ToList();
-        var degradation = RaceStrategy.Slope(stintLaps.Select(x => ((double)x.Lap, x.Seconds)).ToList());
+        var degradation = RaceStrategy.Slope(
+            stintLaps.Select(x => ((double)x.Lap, x.Seconds)).ToList()
+        );
         var degradationText = degradation is null
             ? "[grey]–[/]"
             : $"[{(degradation > 0.05 ? "#ff8c00" : "white")}]{PitWallTheme.Gap(degradation, 3)} s/lap[/]";
@@ -314,9 +350,25 @@ public sealed class PitWallStrategyDisplay(
         );
 
         // Gaps to the cars around, with the trend over the last few laps
-        rows.Add(GapRow("AHEAD ", ahead, ahead is null ? null : SmoothInterval(number, line), ahead, number));
+        rows.Add(
+            GapRow(
+                "AHEAD ",
+                ahead,
+                ahead is null ? null : SmoothInterval(number, line),
+                ahead,
+                number
+            )
+        );
         var behindLine = behind is null ? null : lines.GetValueOrDefault(behind);
-        rows.Add(GapRow("BEHIND", behind, behind is null || behindLine is null ? null : SmoothInterval(behind, behindLine), number, behind));
+        rows.Add(
+            GapRow(
+                "BEHIND",
+                behind,
+                behind is null || behindLine is null ? null : SmoothInterval(behind, behindLine),
+                number,
+                behind
+            )
+        );
 
         // Where the car would rejoin if it pitted this lap
         var rejoin = RaceStrategy.PredictRejoin(lines, number, pitLoss.Seconds);
@@ -329,9 +381,7 @@ public sealed class PitWallStrategyDisplay(
             var behindText = rejoin.BehindDriverNumber is null
                 ? ""
                 : $" [grey]·[/] {DriverMarkup(rejoin.BehindDriverNumber)} [grey]{rejoin.GapToBehind:0.0}s back[/]";
-            var trafficWarning = rejoin.GapToAhead < 1.5
-                ? " [black on #ffe600] TRAFFIC [/]"
-                : "";
+            var trafficWarning = rejoin.GapToAhead < 1.5 ? " [black on #ffe600] TRAFFIC [/]" : "";
             rows.Add(
                 new SingleLine(
                     $"[grey]PIT NOW[/] [bold]P{rejoin.Position}[/] [grey]({(positionChange > 0 ? "-" : "+")}{Math.Abs(positionChange)})[/]{aheadText}{behindText}{trafficWarning}"
@@ -341,17 +391,26 @@ public sealed class PitWallStrategyDisplay(
 
         // Undercut range: cars within range who could jump us, or who we could jump
         var threats = new List<string>();
-        if (behind is not null && behindLine?.IntervalToPositionAhead?.IntervalSeconds() is { } behindGap && (double)behindGap < UndercutRangeSeconds)
+        if (
+            behind is not null
+            && behindLine?.IntervalToPositionAhead?.IntervalSeconds() is { } behindGap
+            && (double)behindGap < UndercutRangeSeconds
+        )
         {
             threats.Add($"[#ff3333]THREAT[/] {DriverMarkup(behind)} {behindGap:0.0}s");
         }
-        if (ahead is not null && line.IntervalToPositionAhead?.IntervalSeconds() is { } aheadGap && (double)aheadGap < UndercutRangeSeconds)
+        if (
+            ahead is not null
+            && line.IntervalToPositionAhead?.IntervalSeconds() is { } aheadGap
+            && (double)aheadGap < UndercutRangeSeconds
+        )
         {
             threats.Add($"[#00dc00]CHANCE[/] {DriverMarkup(ahead)} {aheadGap:0.0}s");
         }
         rows.Add(
             new SingleLine(
-                "[grey]UNDERCUT[/] " + (threats.Count == 0 ? "[grey]nobody in range[/]" : string.Join("  ", threats))
+                "[grey]UNDERCUT[/] "
+                    + (threats.Count == 0 ? "[grey]nobody in range[/]" : string.Join("  ", threats))
             )
         );
 
@@ -374,6 +433,7 @@ public sealed class PitWallStrategyDisplay(
         // Gap history to the cars around, oldest first
         rows.Add(GapHistoryRow("GAP ▲ ", ahead, number));
         rows.Add(GapHistoryRow("GAP ▼ ", number, behind));
+        rows.Add(StopsRow(number));
 
         return CarPanelFrame(driver, line, hex, rows);
     }
@@ -393,27 +453,68 @@ public sealed class PitWallStrategyDisplay(
             BorderStyle = new Style(foreground: Color.FromHex(hex)),
         };
 
+    /// <summary>
+    /// The car's pit stops so far: lap, time in the pit lane and stationary time. The stop
+    /// series has both times; without it, the pit lane times alone are shown. Both feeds need an
+    /// F1 TV login during live sessions.
+    /// </summary>
+    private IRenderable StopsRow(string number)
+    {
+        var stops = pitStops
+            .Latest.PitTimes.GetValueOrDefault(number)
+            ?.OrderBy(x => int.TryParse(x.Key, out var i) ? i : 0)
+            .Select(x => x.Value.PitStop)
+            .Select(x =>
+                $"[grey]L{x.Lap}[/] lane [bold]{x.PitLaneTime}s[/] stop [bold]{x.PitStopTime}s[/]"
+            )
+            .ToList();
+        stops ??= pitLaneTimes
+            .Latest.PitTimesList.GetValueOrDefault(number)
+            ?.Select(x => $"[grey]L{x.Lap}[/] lane [bold]{x.Duration}s[/]")
+            .ToList();
+
+        return new SingleLine(
+            "[grey]STOPS [/] "
+                + (
+                    stops is null || stops.Count == 0
+                        ? "[grey]no stop times (needs an F1 TV login live)[/]"
+                        : string.Join("  ", stops.TakeLast(3))
+                )
+        );
+    }
+
     /// <summary>The interval to the car ahead, interpolated between feed updates.</summary>
     private double? SmoothInterval(string number, TimingDataPoint.Driver line) =>
         line.IntervalToPositionAhead?.IntervalSeconds() is > 0
             ? smoother.Interval(number) ?? (double?)line.IntervalToPositionAhead.IntervalSeconds()
             : (double?)line.IntervalToPositionAhead?.IntervalSeconds();
 
-    private IRenderable GapRow(string label, string? rival, double? gap, string? ahead, string? behind)
+    private IRenderable GapRow(
+        string label,
+        string? rival,
+        double? gap,
+        string? ahead,
+        string? behind
+    )
     {
         if (rival is null || ahead is null || behind is null)
             return new SingleLine($"[grey]{label}[/] [grey]–[/]");
 
-        var history = RaceStrategy.GetGapHistory(timingData.DriversByLap, ahead, behind, TrendLaps + 1);
+        var history = RaceStrategy.GetGapHistory(
+            timingData.DriversByLap,
+            ahead,
+            behind,
+            TrendLaps + 1
+        );
         var trend = RaceStrategy.Slope(history.Select(x => ((double)x.Lap, x.Gap)).ToList());
 
         // For the car ahead a shrinking gap is good, for the car behind a growing gap is good
         var isAhead = label.Trim() == "AHEAD";
-        var trendText = trend is null
-            ? ""
+        var trendText =
+            trend is null ? ""
             : (trend < 0) == isAhead
                 ? $"[#00dc00]{(isAhead ? "closing" : "pulling away")} {Math.Abs(trend.Value):0.00}s/lap[/]"
-                : $"[#ff3333]{(isAhead ? "dropping back" : "being caught")} {Math.Abs(trend.Value):0.00}s/lap[/]";
+            : $"[#ff3333]{(isAhead ? "dropping back" : "being caught")} {Math.Abs(trend.Value):0.00}s/lap[/]";
 
         var rivalLine = timingData.Latest.Lines.GetValueOrDefault(rival);
         var rivalStint = timingAppData
@@ -439,7 +540,9 @@ public sealed class PitWallStrategyDisplay(
             x.Gap is >= 0 and < UndercutRangeSeconds ? $"[#ff8c00]{x.Gap:0.0}[/]" : $"{x.Gap:0.0}"
         );
         // Negative gaps are laps where the order was the other way round
-        return new SingleLine($"[grey]{label}[/]{string.Join(" [grey]›[/] ", values)} [grey](last {history.Count} laps)[/]");
+        return new SingleLine(
+            $"[grey]{label}[/]{string.Join(" [grey]›[/] ", values)} [grey](last {history.Count} laps)[/]"
+        );
     }
 
     private string DriverMarkup(string number)

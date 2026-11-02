@@ -29,7 +29,6 @@ public sealed class DataImporter(
         "SessionData",
         "LapCount",
         "TimingData",
-        "ChampionshipPrediction",
         "TeamRadio",
         "PitLaneTimeCollection",
         "PitStopSeries",

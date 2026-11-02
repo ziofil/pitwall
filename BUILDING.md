@@ -1,6 +1,6 @@
 # Building
 
-`pitwall` can be built in various way to support different deployment targets.
+Pitwall is released as standalone executables, attached to each [GitHub release](https://github.com/ziofil/pitwall/releases) by the `Release Executables` workflow. This is how to build them yourself.
 
 ## Native AOT
 
@@ -15,7 +15,8 @@ There is support for NativeAot though, and we ensure continued support by runnin
 
 ```sh
 # dotnet publish -r <runtime> -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:IncludeAllContentForSelfExtract=true -p:PublicRelease=true Pitwall.Console/Pitwall.Console.csproj -o pitwall-<runtime>-output
-dotnet publish -r linux-amd64 -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:IncludeAllContentForSelfExtract=true -p:PublicRelease=true Pitwall.Console/Pitwall.Console.csproj -o pitwall-linux-amd64-output
+# where <runtime> is one of osx-arm64, osx-x64, linux-x64, linux-arm64, win-x64
+dotnet publish -r osx-arm64 -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:IncludeAllContentForSelfExtract=true -p:PublicRelease=true Pitwall.Console/Pitwall.Console.csproj -o pitwall-osx-arm64-output
 ```
 
 `IncludeNativeLibrariesForSelfExtract` and `IncludeAllContentForSelfExtract` ensures our native library dependencies are
@@ -27,23 +28,12 @@ a single executable as an artifact.
 `PublicRelease` tells `Nerdbank.GitVersioning` that this is a public build, so it shouldn't use prerelease version
 suffixes.
 
-### Docker
-
-Build for a specific platform:
+## Refreshing generated files
 
 ```sh
-docker build . -t ziofil/pitwall:latest --platform linux/amd64
+# The config file JSON Schema (config.schema.json), from the documentation in ConsoleOptions
+dotnet run --project gen/Pitwall.CodeGenerator -- schema
+
+# The circuit outlines, corners and pit loss times shipped in Pitwall.Data/Circuits
+dotnet run --project gen/Pitwall.CodeGenerator -- circuits
 ```
-
-Run:
-
-```sh
-docker run -it -e TERM_PROGRAM -v $HOME/pitwall/data:/data -v $HOME/pitwall/logs:/logs ziofil/pitwall:latest
-```
-
-Passing through the `TERM_PROGRAM` environment variable helps `pitwall` detect which terminal graphics protocol to
-use.
-
-The data and logs directories are configured to be `/data` and `/logs` in the container, respectively.
-`-v $HOME/pitwall/data:/data -v $HOME/pitwall/logs:/logs` mounts these volumes to your home dir, but any dir
-can be used.

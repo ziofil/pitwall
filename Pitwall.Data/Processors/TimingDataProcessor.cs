@@ -18,11 +18,6 @@ public class TimingDataProcessor() : IProcessor<TimingDataPoint>
         private set;
     } = [];
 
-    /// <summary>
-    /// Dictionary of DriverNumber-Lap where each entry is the best lap so far for that DriverNumber.
-    /// </summary>
-    public Dictionary<string, TimingDataPoint.Driver> BestLaps { get; private set; } = new();
-
     public void Process(TimingDataPoint data)
     {
         Latest.MergeWith(data);
@@ -47,45 +42,6 @@ public class TimingDataProcessor() : IProcessor<TimingDataPoint>
             {
                 HandleNewLap(driverNumber, lapUpdate, cloned);
             }
-
-            // This update contains a new best lap
-            if (!string.IsNullOrWhiteSpace(lapUpdate.BestLapTime?.Value))
-            {
-                HandleNewBestLap(driverNumber, lapUpdate, cloned);
-            }
-
-            if (string.IsNullOrWhiteSpace(cloned.BestLapTime?.Value))
-            {
-                // If the BestLapTime is wiped, remove the entry
-                // This usually happens between qualifying sessions
-                _ = BestLaps.Remove(driverNumber);
-            }
-        }
-    }
-
-    private void HandleNewBestLap(
-        string driverNumber,
-        TimingDataPoint.Driver partialUpdate,
-        TimingDataPoint.Driver updated
-    )
-    {
-        // Check for an existing best lap for this driver. If its faster, update it.
-        if (BestLaps.TryGetValue(driverNumber, out var existingBestLap))
-        {
-            var newLapTimeSpan = partialUpdate.BestLapTime?.ToTimeSpan();
-            var existingBestLapTimeSpan = existingBestLap.BestLapTime.ToTimeSpan();
-            if (
-                newLapTimeSpan.HasValue
-                && existingBestLapTimeSpan.HasValue
-                && newLapTimeSpan.Value < existingBestLapTimeSpan.Value
-            )
-            {
-                BestLaps[driverNumber] = updated;
-            }
-        }
-        else
-        {
-            BestLaps.TryAdd(driverNumber, updated);
         }
     }
 

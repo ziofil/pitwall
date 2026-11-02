@@ -36,7 +36,8 @@ public sealed class SingleLine(string markup, Color? background = null) : IRende
         {
             if (used >= limit)
                 break;
-            var text = segment.Text.Length > limit - used ? segment.Text[..(limit - used)] : segment.Text;
+            var text =
+                segment.Text.Length > limit - used ? segment.Text[..(limit - used)] : segment.Text;
             yield return new Segment(text, WithBackground(segment.Style));
             used += text.Length;
         }
@@ -49,7 +50,10 @@ public sealed class SingleLine(string markup, Color? background = null) : IRende
 
         if (background is not null && used < maxWidth)
         {
-            yield return new Segment(new string(' ', maxWidth - used), new Style(background: background));
+            yield return new Segment(
+                new string(' ', maxWidth - used),
+                new Style(background: background)
+            );
         }
     }
 

@@ -56,12 +56,34 @@ public sealed class CarTelemetryHistoryProcessor(
 
     private readonly ConcurrentDictionary<string, DriverState> _drivers = new();
 
+    private static readonly TimeSpan Blend = TimeSpan.FromSeconds(0.3);
+
     // Continuous versions of the analogue channels, for the live readouts. Car data arrives in
     // batches about once a second; this interpolates between the samples.
-    private readonly SignalSmoother _speed = new(TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(0.5), resetThreshold: 120);
-    private readonly SignalSmoother _rpm = new(TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(0.5), resetThreshold: 6000);
-    private readonly SignalSmoother _throttle = new(TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(0.5), resetThreshold: 100);
-    private readonly SignalSmoother _distance = new(TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(1), resetThreshold: 500);
+    private readonly SignalSmoother _speed = new(
+        TimeSpan.FromSeconds(3),
+        TimeSpan.FromSeconds(0.5),
+        resetThreshold: 120,
+        blend: Blend
+    );
+    private readonly SignalSmoother _rpm = new(
+        TimeSpan.FromSeconds(3),
+        TimeSpan.FromSeconds(0.5),
+        resetThreshold: 6000,
+        blend: Blend
+    );
+    private readonly SignalSmoother _throttle = new(
+        TimeSpan.FromSeconds(3),
+        TimeSpan.FromSeconds(0.5),
+        resetThreshold: 100,
+        blend: Blend
+    );
+    private readonly SignalSmoother _distance = new(
+        TimeSpan.FromSeconds(3),
+        TimeSpan.FromSeconds(1),
+        resetThreshold: 500,
+        blend: Blend
+    );
 
     public CarDataPoint Latest { get; private set; } = new();
 
@@ -112,12 +134,16 @@ public sealed class CarTelemetryHistoryProcessor(
 
         sample = step with
         {
-            Speed = _speed.TryGet(driverNumber, at, out var speed) ? (int)Math.Round(speed) : step.Speed,
+            Speed = _speed.TryGet(driverNumber, at, out var speed)
+                ? (int)Math.Round(speed)
+                : step.Speed,
             Rpm = _rpm.TryGet(driverNumber, at, out var rpm) ? (int)Math.Round(rpm) : step.Rpm,
             Throttle = _throttle.TryGet(driverNumber, at, out var throttle)
                 ? (int)Math.Clamp(Math.Round(throttle), 0, 100)
                 : step.Throttle,
-            Distance = _distance.TryGet(driverNumber, at, out var distance) ? Math.Max(0, distance) : step.Distance,
+            Distance = _distance.TryGet(driverNumber, at, out var distance)
+                ? Math.Max(0, distance)
+                : step.Distance,
         };
         return true;
     }

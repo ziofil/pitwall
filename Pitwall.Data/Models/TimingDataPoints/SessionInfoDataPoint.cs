@@ -20,25 +20,32 @@ public sealed partial record SessionInfoDataPoint : ILiveTimingDataPoint
     public MeetingDetail Meeting { get; set; } = new();
 
     /// <summary>
-    /// Populated manually by Pitwall.Data when the data is first processed, from an external API provider.
+    /// Populated by Pitwall.Data when the data is first processed, from the circuit files shipped with Pitwall.
     /// Not provided by F1.
     /// </summary>
     [MergeableIgnore]
     public List<(int x, int y)> CircuitPoints { get; set; } = [];
 
     /// <summary>
-    /// Populated manually by Pitwall.Data when the data is first processed, from an external API provider.
+    /// Populated by Pitwall.Data when the data is first processed, from the circuit files shipped with Pitwall.
     /// Not provided by F1.
     /// </summary>
     [MergeableIgnore]
     public List<(int number, float x, float y)> CircuitCorners { get; set; } = [];
 
     /// <summary>
-    /// Populated manually by Pitwall.Data when the data is first processed, from an external API provider.
+    /// Populated by Pitwall.Data when the data is first processed, from the circuit files shipped with Pitwall.
     /// The rotation that should be applied to the circuit image to make it match the F1 visualisation.
     /// </summary>
     [MergeableIgnore]
     public int CircuitRotation { get; set; } = 0;
+
+    /// <summary>
+    /// Typical pit loss times at this circuit, from the circuit files shipped with Pitwall.
+    /// Not provided by F1.
+    /// </summary>
+    [MergeableIgnore]
+    public PitLossTimes? PitLoss { get; set; }
 
     public sealed partial record MeetingDetail
     {

@@ -348,8 +348,6 @@ public sealed partial class TerminalInfoProvider
         int PixelsPerColumn
     )
     {
-        public readonly double CellAspectRatio => PixelsPerColumn / (double)PixelsPerRow;
-
         public int RowsToPixels(int rows) => rows * PixelsPerRow;
 
         public int ColumnsToPixels(int columns) => columns * PixelsPerColumn;

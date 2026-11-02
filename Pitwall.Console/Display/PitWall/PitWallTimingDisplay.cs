@@ -1,6 +1,6 @@
+using Pitwall.Data;
 using Spectre.Console;
 using Spectre.Console.Rendering;
-using Pitwall.Data;
 
 namespace Pitwall.Console;
 
@@ -47,17 +47,17 @@ public sealed class PitWallTimingDisplay(
 
         var best = SessionBestSectors();
         var table = NewTable(
-            ("POS", 4, Justify.Right),
-            ("NO", 4, Justify.Right),
-            ("DRIVER", 18, Justify.Left),
-            ("GAP", 9, Justify.Right),
-            ("INT", 8, Justify.Right),
-            ("LAST LAP", 10, Justify.Right),
-            (best[0], 7, Justify.Right),
-            (best[1], 7, Justify.Right),
-            (best[2], 7, Justify.Right),
-            ("PIT", 5, Justify.Right),
-            ("LAPS", 5, Justify.Right)
+            ("POS", 4, Justify.Right, ""),
+            ("NO", 4, Justify.Right, ""),
+            ("DRIVER", 18, Justify.Left, ""),
+            ("GAP", 9, Justify.Right, ""),
+            ("INT", 8, Justify.Right, ""),
+            ("LAST LAP", 10, Justify.Right, ""),
+            ("S1", 7, Justify.Right, best[0]),
+            ("S2", 7, Justify.Right, best[1]),
+            ("S3", 7, Justify.Right, best[2]),
+            ("PIT", 5, Justify.Right, ""),
+            ("LAPS", 5, Justify.Right, "")
         );
 
         foreach (var (number, line) in lines)
@@ -65,12 +65,15 @@ public sealed class PitWallTimingDisplay(
             var retired = line.Retired == true || line.Stopped == true;
             // Show times as continuous values interpolated between feed updates; laps and
             // lap counts ("LAP 31", "1 L") stay as the feed sends them
-            var gap = line.GapToLeaderSeconds() is > 0 && smoother.GapToLeader(number) is { } smoothGap
-                ? $"+{smoothGap:0.000}"
-                : line.GapToLeader;
-            var interval = line.IntervalToPositionAhead?.IntervalSeconds() is > 0 && smoother.Interval(number) is { } smoothInterval
-                ? $"+{smoothInterval:0.000}"
-                : line.IntervalToPositionAhead?.Value;
+            var gap =
+                line.GapToLeaderSeconds() is > 0 && smoother.GapToLeader(number) is { } smoothGap
+                    ? $"+{smoothGap:0.000}"
+                    : line.GapToLeader;
+            var interval =
+                line.IntervalToPositionAhead?.IntervalSeconds() is > 0
+                && smoother.Interval(number) is { } smoothInterval
+                    ? $"+{smoothInterval:0.000}"
+                    : line.IntervalToPositionAhead?.Value;
             var intervalStyle =
                 line.IntervalToPositionAhead?.Catching == true
                     ? new Style(foreground: PitWallTheme.Green)
@@ -80,9 +83,15 @@ public sealed class PitWallTimingDisplay(
                 Position(number, line),
                 Number(number, line),
                 Name(number, retired),
-                new Text(retired ? "STOP" : gap ?? "", retired ? PitWallTheme.Dim : PitWallTheme.Normal),
+                new Text(
+                    retired ? "STOP" : gap ?? "",
+                    retired ? PitWallTheme.Dim : PitWallTheme.Normal
+                ),
                 new Text(retired ? "" : interval ?? "", intervalStyle),
-                new Text(line.LastLapTime?.Value ?? "", PitWallTheme.TimeStyle(line.LastLapTime, improvedOnly: true)),
+                new Text(
+                    line.LastLapTime?.Value ?? "",
+                    PitWallTheme.TimeStyle(line.LastLapTime, improvedOnly: true)
+                ),
                 Sector(line, "0"),
                 Sector(line, "1"),
                 Sector(line, "2"),
@@ -102,24 +111,25 @@ public sealed class PitWallTimingDisplay(
         var best = SessionBestSectors();
         var leaderBest = lines.Values.FirstOrDefault()?.BestLapTime.ToTimeSpan();
         var table = NewTable(
-            ("POS", 4, Justify.Right),
-            ("NO", 4, Justify.Right),
-            ("DRIVER", 18, Justify.Left),
-            ("BEST LAP", 10, Justify.Right),
-            ("GAP", 8, Justify.Right),
-            (best[0], 7, Justify.Right),
-            (best[1], 7, Justify.Right),
-            (best[2], 7, Justify.Right),
-            ("LAPS", 5, Justify.Right)
+            ("POS", 4, Justify.Right, ""),
+            ("NO", 4, Justify.Right, ""),
+            ("DRIVER", 18, Justify.Left, ""),
+            ("BEST LAP", 10, Justify.Right, ""),
+            ("GAP", 8, Justify.Right, ""),
+            ("S1", 7, Justify.Right, best[0]),
+            ("S2", 7, Justify.Right, best[1]),
+            ("S3", 7, Justify.Right, best[2]),
+            ("LAPS", 5, Justify.Right, "")
         );
 
         foreach (var (number, line) in lines)
         {
             var knockedOut = line.KnockedOut == true;
             var bestLap = line.BestLapTime.ToTimeSpan();
-            var gap = bestLap is null || leaderBest is null || bestLap == leaderBest
-                ? ""
-                : (bestLap.Value - leaderBest.Value).TotalSeconds.ToString("0.000");
+            var gap =
+                bestLap is null || leaderBest is null || bestLap == leaderBest
+                    ? ""
+                    : (bestLap.Value - leaderBest.Value).TotalSeconds.ToString("0.000");
 
             table.AddRow(
                 Position(number, line),
@@ -136,16 +146,19 @@ public sealed class PitWallTimingDisplay(
         return table;
     }
 
-    private static Table NewTable(params (string Header, int Width, Justify Alignment)[] columns)
+    /// <summary>
+    /// A table with two header lines: the column titles in cyan, and beneath the sector titles
+    /// the session-best sector times in purple, as the real monitor shows them.
+    /// </summary>
+    private static Table NewTable(
+        params (string Header, int Width, Justify Alignment, string Best)[] columns
+    )
     {
         var table = new Table().NoBorder().NoSafeBorder();
         table.ShowHeaders = true;
-        foreach (var (header, width, alignment) in columns)
+        foreach (var (header, width, alignment, best) in columns)
         {
-            // Sector headers show the session-best sector time in purple, like the real monitor
-            var markup = header.Contains('.')
-                ? $"[bold {Purple}]{header}[/]"
-                : $"[bold {Cyan}]{header}[/]";
+            var markup = $"[bold {Cyan}]{header}[/]\n[bold {Purple}]{best}[/]";
             table.AddColumn(
                 new TableColumn(new Markup(markup))
                 {
@@ -165,7 +178,7 @@ public sealed class PitWallTimingDisplay(
         var marker = context.IsTeamCar(number)
             ? $"[{PitWallTheme.TeamColour(context.Team?.Colour).ToMarkup()}]▌[/]"
             : " ";
-        return new Markup($"{marker}[bold {Cyan}]{line.Line,2}[/]");
+        return new Markup($"{marker}[bold {Cyan}]{line.Line, 2}[/]");
     }
 
     private IRenderable Number(string number, TimingDataPoint.Driver line, bool knockedOut = false)
@@ -178,8 +191,10 @@ public sealed class PitWallTimingDisplay(
     {
         var driver = context.Driver(number);
         var name = Markup.Escape(FormatName(driver));
-        var style = dimmed ? "#8899bb"
-            : context.IsTeamCar(number) ? $"bold {PitWallTheme.TeamColour(context.Team?.Colour).ToMarkup()}"
+        var style =
+            dimmed ? "#8899bb"
+            : context.IsTeamCar(number)
+                ? $"bold {PitWallTheme.TeamColour(context.Team?.Colour).ToMarkup()}"
             : "bold white";
         return new Markup($"[{style}]{name}[/]");
     }
@@ -203,16 +218,25 @@ public sealed class PitWallTimingDisplay(
     // The monitor shows sector times to one decimal place
     private static string ShortSector(string? value) =>
         decimal.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var seconds)
-            ? (Math.Floor(seconds * 10) / 10).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)
+            ? (Math.Floor(seconds * 10) / 10).ToString(
+                "0.0",
+                System.Globalization.CultureInfo.InvariantCulture
+            )
             : value ?? "";
 
     private static IRenderable Pit(TimingDataPoint.Driver line) =>
         line switch
         {
             { Retired: true } or { Stopped: true } => new Text(""),
-            { InPit: true } => new Text("PIT", new Style(foreground: PitWallTheme.Red, decoration: Decoration.Bold)),
-            { PitOut: true } => new Text("OUT", new Style(foreground: PitWallTheme.Green, decoration: Decoration.Bold)),
-            _ => new Text($"{line.NumberOfPitStops}", PitWallTheme.Normal),
+            { InPit: true } => new Text(
+                "PIT",
+                new Style(foreground: PitWallTheme.Red, decoration: Decoration.Bold)
+            ),
+            { PitOut: true } => new Text(
+                "OUT",
+                new Style(foreground: PitWallTheme.Green, decoration: Decoration.Bold)
+            ),
+            _ => new Text($"{line.NumberOfPitStops ?? 0}", PitWallTheme.Normal),
         };
 
     /// <summary>The fastest time set in each sector so far this session, to one decimal place.</summary>
@@ -239,7 +263,11 @@ public sealed class PitWallTimingDisplay(
                         )
                         .Where(x => x > 0)
                         .Min();
-                    return best is null ? $"S{i + 1}" : ShortSector(best.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    return best is null
+                        ? ""
+                        : ShortSector(
+                            best.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        );
                 }),
         ];
     }

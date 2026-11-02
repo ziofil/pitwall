@@ -36,7 +36,6 @@ public sealed class LiveTimingClient : ILiveTimingClient, IDisposable
         // Only available with subscription
         "CarData.z",
         "Position.z",
-        "ChampionshipPrediction",
         "PitLaneTimeCollection",
         // Only available after a session?
         "PitStopSeries",

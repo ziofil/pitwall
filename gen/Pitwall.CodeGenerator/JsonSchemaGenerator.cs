@@ -14,31 +14,26 @@ public sealed class JsonSchemaGenerator
 {
     private static readonly JsonSerializerOptions _serializerOptions = new(
         JsonSerializerDefaults.Web
-    );
+    )
+    {
+        WriteIndented = true,
+    };
 
     /// <summary>
     /// Generates JSON Schema files for Pitwall configuration
     /// </summary>
-    public async Task GenerateOptionsSchemaAsync()
+    public async Task GenerateOptionsSchemaAsync(string repositoryRoot)
     {
-        var repositoryRoot = Environment.ProcessPath;
-        if (string.IsNullOrEmpty(repositoryRoot))
-        {
-            throw new InvalidOperationException("Unable to determine the path of the executable");
-        }
-
-        repositoryRoot = Directory.GetParent(repositoryRoot)!.ToString();
-        repositoryRoot = Path.Join(repositoryRoot, "../../../../..");
-
         var config = new SchemaGeneratorConfiguration()
         {
             PropertyNameResolver = PropertyNameResolvers.CamelCase,
         };
+        // The XML doc files of the referenced projects are copied next to this tool
         config.RegisterXmlCommentFile<LiveTimingOptions>(
-            Path.Join(repositoryRoot, "Pitwall.Data/bin/Debug/net9.0/Pitwall.Data.xml")
+            Path.Join(AppContext.BaseDirectory, "Pitwall.Data.xml")
         );
         config.RegisterXmlCommentFile<ConsoleOptions>(
-            Path.Join(repositoryRoot, "Pitwall.Console/bin/Debug/net9.0/pitwall.xml")
+            Path.Join(AppContext.BaseDirectory, "pitwall.xml")
         );
 
         var schemaBuilder = new JsonSchemaBuilder();

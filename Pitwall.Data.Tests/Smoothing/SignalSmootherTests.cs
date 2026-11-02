@@ -5,7 +5,12 @@ public class SignalSmootherTests
     private static readonly DateTimeOffset Start = new(2024, 7, 7, 14, 0, 0, TimeSpan.Zero);
 
     private static SignalSmoother Smoother(double resetThreshold = 100) =>
-        new(TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(1), resetThreshold);
+        new(
+            TimeSpan.FromSeconds(10),
+            TimeSpan.FromSeconds(1),
+            resetThreshold,
+            blend: TimeSpan.Zero
+        );
 
     [Fact]
     public void InterpolatesBetweenSamples()
@@ -55,6 +60,44 @@ public class SignalSmootherTests
 
         Assert.True(smoother.TryGet("x", Start.AddSeconds(5.5), out var value));
         Assert.Equal(21.0, value, precision: 6);
+    }
+
+    [Fact]
+    public void ShownValueNeverJumpsWhenSamplesArrive()
+    {
+        // Gaps update about every 4 seconds; the value is shown every 66ms, 1.5s behind
+        var smoother = new SignalSmoother(
+            TimeSpan.FromSeconds(30),
+            TimeSpan.FromSeconds(6),
+            resetThreshold: 2,
+            blend: TimeSpan.FromSeconds(1)
+        );
+        var random = new Random(1);
+        var gap = 3.0;
+        var nextSample = Start;
+        double? previous = null;
+        var largestStep = 0.0;
+
+        for (var now = Start; now < Start.AddSeconds(120); now = now.AddMilliseconds(66))
+        {
+            if (now >= nextSample)
+            {
+                // A gap closing at ~0.1s per second, with timing noise
+                gap -= 0.4 + (random.NextDouble() * 0.2 - 0.1);
+                smoother.Add("x", now, gap);
+                nextSample = now.AddSeconds(3 + (random.NextDouble() * 3));
+            }
+
+            if (smoother.TryGet("x", now.AddSeconds(-1.5), out var shown))
+            {
+                if (previous is not null)
+                    largestStep = Math.Max(largestStep, Math.Abs(shown - previous.Value));
+                previous = shown;
+            }
+        }
+
+        // The value changes at ~0.1s per second, so ~0.007 per frame; allow some easing
+        Assert.True(largestStep < 0.05, $"Largest step between frames was {largestStep:0.000}s");
     }
 
     [Fact]

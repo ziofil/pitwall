@@ -143,7 +143,8 @@ public sealed class BrailleCanvas(int columns, int rows) : IRenderable
         foreach (var (x, y) in points)
         {
             var px = (int)Math.Round((x - minX) / rangeX * (Width - 1));
-            var py = (int)Math.Round((1 - ((Math.Clamp(y, minY, maxY) - minY) / rangeY)) * (Height - 1));
+            var py = (int)
+                Math.Round((1 - ((Math.Clamp(y, minY, maxY) - minY) / rangeY)) * (Height - 1));
             if (previous is { } p)
             {
                 Line(p.X, p.Y, px, py, colour);
@@ -169,9 +170,10 @@ public sealed class BrailleCanvas(int columns, int rows) : IRenderable
             {
                 if (_labels.TryGetValue((column, row), out var label) && label.Text.Length > 0)
                 {
-                    var text = label.Text.Length > width - column
-                        ? label.Text[..(width - column)]
-                        : label.Text;
+                    var text =
+                        label.Text.Length > width - column
+                            ? label.Text[..(width - column)]
+                            : label.Text;
                     yield return new Segment(text, label.Style);
                     column += text.Length;
                     continue;

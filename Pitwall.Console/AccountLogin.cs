@@ -1,14 +1,21 @@
 using System.Text.Json.Nodes;
+using Pitwall.Data;
 using SharpWebview;
 using SharpWebview.Content;
-using Pitwall.Data;
 
 namespace Pitwall.Console;
 
 public sealed class AccountLogin(Formula1Account accountService, ILogger<AccountLogin> logger)
 {
+    /// <summary>
+    /// Whether the login window has already been opened in this run. It can only be opened once:
+    /// opening a second one crashes the app on macOS, so a restart is needed to log in again.
+    /// </summary>
+    public bool WindowUsed { get; private set; }
+
     public async Task<Formula1Account.TokenPayload?> LoginAsync(Action<LoginStatus> onStatusUpdate)
     {
+        WindowUsed = true;
         await MainThreadDispatch.Execute(async () => await LoginCoreAsync(onStatusUpdate));
         return accountService.Payload;
     }
@@ -22,6 +29,9 @@ public sealed class AccountLogin(Formula1Account accountService, ILogger<Account
             ConsoleOptions.ConfigFilePath,
             configFileJson.ToJsonString(ConsoleSerializerContext.Pretty.Options)
         );
+
+        // Stop using the token in this run too, not just from the next start
+        accountService.Refresh(null);
     }
 
     private async Task LoginCoreAsync(Action<LoginStatus> onStatusUpdate)

@@ -1,13 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <PackageId>pitwall</PackageId>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
     <AssemblyName>pitwall</AssemblyName>
-    <ToolCommandName>pitwall</ToolCommandName>
-    <PackAsTool>true</PackAsTool>
-    <IsPackable>true</IsPackable>
-    <PackageTags>formula1;formula-1;f1;livetiming;timing;tui;terminal-ui</PackageTags>
+    <!-- Released as standalone executables on GitHub, not as a NuGet package -->
+    <IsPackable>false</IsPackable>
     <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
     <InvariantGlobalization>true</InvariantGlobalization>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
@@ -21,6 +17,7 @@
     <PackageReference Include="InhibitSleep.Net" />
     <PackageReference Include="InMemoryLogger" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.OpenApi" />
     <PackageReference Include="Serilog" />
     <PackageReference Include="Serilog.AspNetCore" />
     <PackageReference Include="Serilog.Sinks.File" />
@@ -44,9 +41,7 @@
     />
     <ProjectReference Include="..\Pitwall.Data\Pitwall.Data.csproj" />
   </ItemGroup>
-  <ItemGroup>
-    <None Include="../README.md" Pack="true" PackagePath="\" />
-  </ItemGroup>
+  <ItemGroup></ItemGroup>
   <Target
     Name="OverrideVersion"
     AfterTargets="GetBuildVersion"
@@ -61,4 +56,7 @@
       <NugetPackageVersion>$(OverridePackageVersion)</NugetPackageVersion>
     </PropertyGroup>
   </Target>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Pitwall.Console.Tests" />
+  </ItemGroup>
 </Project>

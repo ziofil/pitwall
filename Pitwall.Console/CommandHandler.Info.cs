@@ -1,6 +1,6 @@
+using Pitwall.Console.Graphics;
 using Spectre.Console;
 using Spectre.Console.Advanced;
-using Pitwall.Console.Graphics;
 
 namespace Pitwall.Console;
 

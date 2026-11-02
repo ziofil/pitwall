@@ -4,14 +4,16 @@ public sealed class CursorInputHandler(State state) : IInputHandler
 {
     public bool IsEnabled => true;
 
-    public Screen[] ApplicableScreens => Enum.GetValues<Screen>();
+    // On most pit wall pages the up and down arrows change team instead
+    public Screen[] ApplicableScreens =>
+        Enum.GetValues<Screen>().Except(ChangeTeamInputHandler.Screens).ToArray();
 
     public ConsoleKey[] Keys =>
         [ConsoleKey.UpArrow, ConsoleKey.DownArrow, ConsoleKey.J, ConsoleKey.K];
 
     public ConsoleKey[] DisplayKeys => [ConsoleKey.UpArrow, ConsoleKey.DownArrow];
 
-    public string Description => $"Cursor {state.CursorOffset}";
+    public string Description => "Move";
 
     public int Sort => 21;
 

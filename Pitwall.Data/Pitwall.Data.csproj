@@ -1,9 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <IsPackable>true</IsPackable>
-    <PackageId>Pitwall.Data</PackageId>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageTags>formula1;f1;livetiming;timing</PackageTags>
+    <IsPackable>false</IsPackable>
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
   <ItemGroup>
@@ -25,8 +22,10 @@
       PrivateAssets="all"
     />
   </ItemGroup>
+  <ItemGroup></ItemGroup>
   <ItemGroup>
-    <None Include="../README.md" Pack="true" PackagePath="\" />
+    <!-- Circuit outlines shipped with the app, see CircuitLibrary -->
+    <EmbeddedResource Include="Circuits/*.json" LogicalName="Circuits.%(Filename).json" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Pitwall.Console.Tests" />

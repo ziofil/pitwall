@@ -3,12 +3,32 @@ namespace Pitwall.Data;
 /// <summary>A lap time sample used for pace and degradation calculations.</summary>
 public readonly record struct LapSample(int Lap, double Seconds);
 
+/// <summary>Where a pit loss estimate comes from.</summary>
+public enum PitLossSource
+{
+    /// <summary>Measured from the stops made so far in this session.</summary>
+    Observed,
+
+    /// <summary>The circuit's typical value, before any stops have been made.</summary>
+    Circuit,
+
+    /// <summary>A generic value, when neither stops nor circuit data are available.</summary>
+    Default,
+
+    /// <summary>The circuit's typical value under a safety car.</summary>
+    SafetyCar,
+
+    /// <summary>The circuit's typical value under a virtual safety car.</summary>
+    VirtualSafetyCar,
+}
+
 /// <summary>The estimated time lost by making a pit stop, and how it was derived.</summary>
 /// <param name="Seconds">Estimated total time lost compared to staying out, in seconds.</param>
-/// <param name="Samples">How many observed stops the estimate is based on. Zero means it's a default.</param>
-public readonly record struct PitLossEstimate(double Seconds, int Samples)
+/// <param name="Samples">How many observed stops the estimate is based on.</param>
+/// <param name="Source">Where the estimate comes from.</param>
+public readonly record struct PitLossEstimate(double Seconds, int Samples, PitLossSource Source)
 {
-    public bool IsDefault => Samples == 0;
+    public bool IsDefault => Source == PitLossSource.Default;
 }
 
 /// <summary>Where a car would rejoin if it pitted now, assuming nobody else pits.</summary>
@@ -73,10 +93,12 @@ public static class RaceStrategy
     /// for each stop, the in-lap and out-lap times minus what the cars that didn't pit lapped
     /// in on those same laps. Comparing against the field on the same laps keeps the estimate
     /// right when conditions change, e.g. stops for intermediates as rain arrives.
-    /// Falls back to <see cref="DefaultPitLossSeconds"/> until a stop has been observed.
+    /// Until a stop has been observed it uses the circuit's typical pit loss, if known, and
+    /// otherwise <see cref="DefaultPitLossSeconds"/>.
     /// </summary>
     public static PitLossEstimate EstimatePitLoss(
-        IReadOnlyDictionary<int, Dictionary<string, TimingDataPoint.Driver>> driversByLap
+        IReadOnlyDictionary<int, Dictionary<string, TimingDataPoint.Driver>> driversByLap,
+        PitLossTimes? circuit = null
     )
     {
         // The typical lap time of cars not pitting, per lap
@@ -125,10 +147,37 @@ public static class RaceStrategy
             }
         }
 
-        return losses.Count == 0
-            ? new PitLossEstimate(DefaultPitLossSeconds, 0)
-            : new PitLossEstimate(Median(losses), losses.Count);
+        return losses.Count > 0
+                ? new PitLossEstimate(Median(losses), losses.Count, PitLossSource.Observed)
+            : circuit is null ? new PitLossEstimate(DefaultPitLossSeconds, 0, PitLossSource.Default)
+            : new PitLossEstimate(circuit.Normal, 0, PitLossSource.Circuit);
     }
+
+    /// <summary>
+    /// The pit loss right now. A stop under a safety car or VSC costs much less, because the field
+    /// is running slowly, so under those the circuit's typical SC/VSC values are used. Without
+    /// circuit data, the green-flag estimate is scaled by the usual ratio (about 65% and 70%).
+    /// </summary>
+    /// <param name="trackStatus">The feed's track status code: 4 is a safety car, 6 and 7 a VSC.</param>
+    public static PitLossEstimate ForTrackStatus(
+        PitLossEstimate green,
+        PitLossTimes? circuit,
+        string? trackStatus
+    ) =>
+        trackStatus switch
+        {
+            "4" => new(
+                circuit?.SafetyCar ?? green.Seconds * 0.65,
+                green.Samples,
+                PitLossSource.SafetyCar
+            ),
+            "6" or "7" => new(
+                circuit?.VirtualSafetyCar ?? green.Seconds * 0.7,
+                green.Samples,
+                PitLossSource.VirtualSafetyCar
+            ),
+            _ => green,
+        };
 
     /// <summary>
     /// Predicts where a car would rejoin if it made a pit stop now, assuming no one else stops.
@@ -156,16 +205,16 @@ public static class RaceStrategy
             .OrderBy(x => x.Gap)
             .ToList();
 
-        var ahead = others.LastOrDefault(x => x.Gap <= projected);
-        var behind = others.FirstOrDefault(x => x.Gap > projected);
+        var (aheadNumber, aheadGap) = others.LastOrDefault(x => x.Gap <= projected);
+        var (behindNumber, behindGap) = others.FirstOrDefault(x => x.Gap > projected);
         var position = others.Count(x => x.Gap <= projected) + 1;
 
         return new RejoinPrediction(
             Position: position,
-            AheadDriverNumber: ahead.DriverNumber,
-            GapToAhead: ahead.DriverNumber is null ? null : projected - ahead.Gap,
-            BehindDriverNumber: behind.DriverNumber,
-            GapToBehind: behind.DriverNumber is null ? null : behind.Gap - projected
+            AheadDriverNumber: aheadNumber,
+            GapToAhead: aheadNumber is null ? null : projected - aheadGap,
+            BehindDriverNumber: behindNumber,
+            GapToBehind: behindNumber is null ? null : behindGap - projected
         );
     }
 

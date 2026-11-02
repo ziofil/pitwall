@@ -58,10 +58,7 @@ public class StartSimulatedSessionDisplay(
             {
                 locationTable.AddRow(
                     new Text(Date.ToShortDateString() + " ", Inverted),
-                    new Text(
-                        Location.ToFixedWidth(maxLocationLength, padRight: true),
-                        Inverted
-                    )
+                    new Text(Location.ToFixedWidth(maxLocationLength, padRight: true), Inverted)
                 );
             }
             else

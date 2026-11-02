@@ -34,7 +34,8 @@ public sealed class PitWallPageInputHandler(State state) : IInputHandler
         var index = Array.FindIndex(pages, x => x.Screen == state.CurrentScreen);
         var numberIndex = Array.IndexOf(NumberKeys, consoleKeyInfo.Key);
 
-        var newIndex = numberIndex >= 0 ? numberIndex
+        var newIndex =
+            numberIndex >= 0 ? numberIndex
             : consoleKeyInfo.Key is ConsoleKey.LeftArrow or ConsoleKey.H ? index - 1
             : index + 1;
         newIndex = ((newIndex % pages.Length) + pages.Length) % pages.Length;

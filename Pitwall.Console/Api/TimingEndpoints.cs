@@ -9,10 +9,6 @@ public static class TimingEndpoints
     public static WebApplication MapTimingEndpoints(this WebApplication app)
     {
         app.MapLatestDataEndpoint<CarDataProcessor, CarDataPoint>()
-            .MapLatestDataEndpoint<
-                ChampionshipPredictionProcessor,
-                ChampionshipPredictionDataPoint
-            >()
             .MapLatestDataEndpoint<DriverListProcessor, DriverListDataPoint>()
             .MapLatestDataEndpoint<ExtrapolatedClockProcessor, ExtrapolatedClockDataPoint>()
             .MapLatestDataEndpoint<HeartbeatProcessor, HeartbeatDataPoint>()
@@ -35,15 +31,6 @@ public static class TimingEndpoints
                     return processor.DriversByLap.TryGetValue(lapNumber, out var data)
                         ? TypedResults.Ok(data)
                         : Results.NotFound();
-                }
-            )
-            .WithTags("Timing Data");
-
-        app.MapGet(
-                "/data/TimingData/laps/best",
-                (TimingDataProcessor processor) =>
-                {
-                    return TypedResults.Ok(processor.BestLaps);
                 }
             )
             .WithTags("Timing Data");

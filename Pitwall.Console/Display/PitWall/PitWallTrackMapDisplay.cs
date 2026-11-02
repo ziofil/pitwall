@@ -1,7 +1,8 @@
 using Microsoft.Extensions.Options;
+using Pitwall.Console.Graphics;
+using Pitwall.Data;
 using Spectre.Console;
 using Spectre.Console.Rendering;
-using Pitwall.Data;
 
 namespace Pitwall.Console;
 
@@ -10,8 +11,9 @@ namespace Pitwall.Console;
 /// showing where every car is around the lap (with the latest race control messages and the
 /// clocks inside), next to the circuit outline with the cars on it. The team's cars are drawn
 /// in the team colour, cars off track or stopped in red, cars in the pit lane in cyan.
-/// Drawn with braille characters so it works in any terminal. With position smoothing on, cars
-/// glide between the feed's roughly once-a-second updates and the page redraws at ~15 fps.
+/// Terminals with inline graphics get a drawn image with solid lines and real text; others get a
+/// braille-character version. With position smoothing on, cars glide between the feed's roughly
+/// once-a-second updates and the page redraws at ~15 fps.
 /// </summary>
 public sealed class PitWallTrackMapDisplay(
     PitWallComponents components,
@@ -23,12 +25,17 @@ public sealed class PitWallTrackMapDisplay(
     TimingDataProcessor timingData,
     RaceControlMessageProcessor raceControl,
     ExtrapolatedClockProcessor extrapolatedClock,
-    IDateTimeProvider dateTimeProvider
+    IDateTimeProvider dateTimeProvider,
+    ITerminalImages images
 ) : IDisplay
 {
-    private static readonly Color TrackColour = new(150, 150, 160);
+    private string[] _imageSequence = [];
+    private string[] _previousImageSequence = [];
+
+    private static readonly Color TrackColour = new(170, 170, 182);
+    private static readonly Color RingColour = new(110, 110, 124);
     private static readonly Color OtherCar = new(235, 235, 235);
-    private static readonly Color BackgroundCar = new(120, 120, 130);
+    private static readonly Color BackgroundCar = new(150, 150, 162);
 
     public Screen Screen => Screen.PitWallTrackMap;
 
@@ -38,7 +45,7 @@ public sealed class PitWallTrackMapDisplay(
             ? TimeSpan.FromMilliseconds(66)
             : TimeSpan.FromMilliseconds(IDisplay.DefaultFrameIntervalMs);
 
-    private sealed record CarOnTrack(
+    internal sealed record CarOnTrack(
         string Number,
         string Tla,
         double Progress,
@@ -71,16 +78,106 @@ public sealed class PitWallTrackMapDisplay(
         else
         {
             var cars = CarsOnTrack(circuit, entries);
-            body = new Layout("Track").SplitColumns(
-                new Layout("Ring", new CanvasRenderable(canvas => DrawRing(canvas, cars), 30)),
-                new Layout("Outline", new CanvasRenderable(canvas => DrawOutline(canvas, circuit, cars), 30))
-            );
+            if (images.Supported)
+            {
+                // Drawn over the empty body after the text is drawn, see PostContentDrawAsync
+                _imageSequence = RenderImage(circuit, cars);
+                body = new Text("");
+            }
+            else
+            {
+                body = new Layout("Track").SplitColumns(
+                    new Layout("Ring", new CanvasRenderable(canvas => DrawRing(canvas, cars), 30)),
+                    new Layout(
+                        "Outline",
+                        new CanvasRenderable(canvas => DrawOutline(canvas, circuit, cars), 30)
+                    )
+                );
+            }
         }
+
+        if (body is not Text)
+            _imageSequence = [];
 
         return Task.FromResult(components.Page(Screen, body));
     }
 
-    private List<CarOnTrack> CarsOnTrack(
+    /// <summary>The body of the page as an inline image, filling the space below the header.</summary>
+    private string[] RenderImage(List<(int x, int y)> circuit, List<CarOnTrack> cars)
+    {
+        var (columns, rows) = images.WindowCells;
+        // Leave the header above and the key hints line below
+        rows -= PitWallComponents.HeaderHeight + 1;
+        if (columns <= 0 || rows <= 0)
+            return [];
+
+        var scene = BuildScene(circuit, cars);
+        var (width, height) = images.CellsToPixels(columns, rows);
+        using var image = TrackMapRenderer.Render(scene, width, height);
+        return images.Encode(image, columns, rows);
+    }
+
+    /// <summary>The cars, circuit and messages to draw, in the form the image renderer takes.</summary>
+    internal TrackScene BuildScene(List<(int x, int y)> circuit, List<CarOnTrack> cars) =>
+        new(
+            circuit.Select(p => (p.x, p.y)).ToList(),
+            sessionInfo.Latest.CircuitCorners,
+            cars.Select(car => new TrackCar(
+                    car.Number,
+                    car.Tla,
+                    car.Progress,
+                    car.X,
+                    car.Y,
+                    car.Colour.ToHex(),
+                    car.Focus,
+                    context.IsTeamCar(car.Number)
+                ))
+                .ToList(),
+            InnerText(cars.Count)
+                .Select(x =>
+                    (
+                        x.Text,
+                        (
+                            x.Style.Background != Color.Default
+                                ? x.Style.Background
+                                : x.Style.Foreground
+                        ).ToHex()
+                    )
+                )
+                .ToList()
+        );
+
+    /// <summary>The scene for the current data, or <c>null</c> if there's nothing to draw.</summary>
+    internal TrackScene? CurrentScene()
+    {
+        var circuit = sessionInfo.Latest.CircuitPoints;
+        var entries = positionData.Latest.Position.LastOrDefault()?.Entries ?? [];
+        return circuit.Count < 2 || entries.Count == 0
+            ? null
+            : BuildScene(circuit, CarsOnTrack(circuit, entries));
+    }
+
+    public async Task PostContentDrawAsync(bool forceDraw)
+    {
+        if (_imageSequence.Length == 0)
+        {
+            _previousImageSequence = [];
+            return;
+        }
+
+        // Re-send the image when the text layer was redrawn over it, or when the image changed
+        if (forceDraw || !_previousImageSequence.SequenceEqual(_imageSequence))
+        {
+            await Terminal.OutAsync(
+                ControlSequences.MoveCursorTo(PitWallComponents.HeaderHeight, 0)
+            );
+            foreach (var sequence in _imageSequence)
+                await Terminal.OutAsync(sequence);
+            _previousImageSequence = _imageSequence;
+        }
+    }
+
+    internal List<CarOnTrack> CarsOnTrack(
         List<(int x, int y)> circuit,
         Dictionary<string, PositionDataPoint.PositionData.Entry> entries
     )
@@ -92,7 +189,10 @@ public sealed class PitWallTrackMapDisplay(
         {
             if (entry.X is not { } x || entry.Y is not { } y)
                 continue;
-            if (options.Value.EnablePositionSmoothing && positionSmoother.TryGetSmoothed(number, out var smoothed))
+            if (
+                options.Value.EnablePositionSmoothing
+                && positionSmoother.TryGetSmoothed(number, out var smoothed)
+            )
             {
                 (x, y) = ((int)Math.Round(smoothed.x), (int)Math.Round(smoothed.y));
             }
@@ -168,14 +268,18 @@ public sealed class PitWallTrackMapDisplay(
             return;
 
         // The ring itself, with ticks every tenth of a lap
-        for (var step = 0; step < 720; step++)
+        // Two dots thick, so it reads as a solid line
+        for (var step = 0; step < 1440; step++)
         {
-            var angle = step / 720.0 * 2 * Math.PI;
-            canvas.Set(
-                centreX + (int)Math.Round(radius * Math.Sin(angle)),
-                centreY - (int)Math.Round(radius * Math.Cos(angle)),
-                PitWallTheme.Grid
-            );
+            var angle = step / 1440.0 * 2 * Math.PI;
+            foreach (var r in new[] { radius, radius - 1 })
+            {
+                canvas.Set(
+                    centreX + (int)Math.Round(r * Math.Sin(angle)),
+                    centreY - (int)Math.Round(r * Math.Cos(angle)),
+                    RingColour
+                );
+            }
         }
         for (var tenth = 0; tenth < 10; tenth++)
         {
@@ -193,20 +297,36 @@ public sealed class PitWallTrackMapDisplay(
             var (x0, y0) = PointOnRing(centreX, centreY, radius - 3, angle);
             var (x1, y1) = PointOnRing(centreX, centreY, radius + 3, angle);
             canvas.Line(x0, y0, x1, y1, car.Colour);
+            canvas.Line(x0 + 1, y0, x1 + 1, y1, car.Colour);
 
             // Label outside the ring, nudged away from labels already placed
             var (lx, ly) = PointOnRing(centreX, centreY, radius + 9, angle);
-            var column = (lx / 2) - (Math.Sin(angle) < -0.3 ? 3 : Math.Sin(angle) > 0.3 ? 0 : 1);
+            var column =
+                (lx / 2)
+                - (
+                    Math.Sin(angle) < -0.3 ? 3
+                    : Math.Sin(angle) > 0.3 ? 0
+                    : 1
+                );
             var row = ly / 4;
             var label = car.Tla;
-            if (!usedLabels.Any(u => u.Row == row && column < u.Column + u.Length + 1 && u.Column < column + label.Length + 1))
+            if (
+                !usedLabels.Any(u =>
+                    u.Row == row
+                    && column < u.Column + u.Length + 1
+                    && u.Column < column + label.Length + 1
+                )
+            )
             {
                 usedLabels.Add((column, row, label.Length));
                 canvas.Label(
                     column,
                     row,
                     label,
-                    new Style(foreground: car.Colour, decoration: car.Focus ? Decoration.Bold : Decoration.None)
+                    new Style(
+                        foreground: car.Colour,
+                        decoration: car.Focus ? Decoration.Bold : Decoration.None
+                    )
                 );
             }
         }
@@ -222,13 +342,23 @@ public sealed class PitWallTrackMapDisplay(
                 text = text[..maxWidth];
             canvas.Label((centreX / 2) - (text.Length / 2), firstRow + i, text, style);
         }
-        canvas.Label((centreX / 2) - 1, Math.Max(0, ((centreY - radius) / 4) - 1), "S/F", PitWallTheme.Dim);
+        canvas.Label(
+            (centreX / 2) - 1,
+            Math.Max(0, ((centreY - radius) / 4) - 1),
+            "S/F",
+            PitWallTheme.Dim
+        );
     }
 
     private List<(string Text, Style Style)> InnerText(int carsOnTrack)
     {
         var lines = new List<(string, Style)>();
-        foreach (var message in raceControl.Latest.Messages.Values.OrderByDescending(x => x.Utc).Take(4).Reverse())
+        foreach (
+            var message in raceControl
+                .Latest.Messages.Values.OrderByDescending(x => x.Utc)
+                .Take(4)
+                .Reverse()
+        )
         {
             var text = message.Message?.ToUpperInvariant() ?? "";
             lines.Add((text, PitWallCommsDisplay.MessageStyle(message)));
@@ -240,14 +370,31 @@ public sealed class PitWallTrackMapDisplay(
             ? TimeSpan.Zero
             : TimeSpan.Parse(sessionInfo.Latest.GmtOffset);
         var now = dateTimeProvider.Utc.ToOffset(localOffset);
-        lines.Add(($@"NOW: {now:HH\:mm\:ss}  END: {extrapolatedClock.ExtrapolatedRemaining():h\:mm\:ss}", PitWallTheme.Normal));
+        lines.Add(
+            (
+                $@"NOW: {now:HH\:mm\:ss}  END: {extrapolatedClock.ExtrapolatedRemaining():h\:mm\:ss}",
+                PitWallTheme.Normal
+            )
+        );
         return lines;
     }
 
-    private static (int X, int Y) PointOnRing(int centreX, int centreY, double radius, double angle) =>
-        (centreX + (int)Math.Round(radius * Math.Sin(angle)), centreY - (int)Math.Round(radius * Math.Cos(angle)));
+    private static (int X, int Y) PointOnRing(
+        int centreX,
+        int centreY,
+        double radius,
+        double angle
+    ) =>
+        (
+            centreX + (int)Math.Round(radius * Math.Sin(angle)),
+            centreY - (int)Math.Round(radius * Math.Cos(angle))
+        );
 
-    private void DrawOutline(BrailleCanvas canvas, List<(int x, int y)> circuit, List<CarOnTrack> cars)
+    private void DrawOutline(
+        BrailleCanvas canvas,
+        List<(int x, int y)> circuit,
+        List<CarOnTrack> cars
+    )
     {
         const int padding = 6;
         var minX = circuit.Min(p => p.x);
@@ -265,13 +412,19 @@ public sealed class PitWallTrackMapDisplay(
         var offsetX = (canvas.Width - ((maxX - minX) * scale)) / 2;
         var offsetY = (canvas.Height - ((maxY - minY) * scale)) / 2;
         (int X, int Y) Transform(double x, double y) =>
-            ((int)Math.Round(offsetX + ((x - minX) * scale)), (int)Math.Round(canvas.Height - offsetY - ((y - minY) * scale)));
+            (
+                (int)Math.Round(offsetX + ((x - minX) * scale)),
+                (int)Math.Round(canvas.Height - offsetY - ((y - minY) * scale))
+            );
 
         var previous = Transform(circuit[0].x, circuit[0].y);
-        foreach (var point in circuit.Skip(1).Append(circuit[0]))
+        foreach (var (x, y) in circuit.Skip(1).Append(circuit[0]))
         {
-            var next = Transform(point.x, point.y);
+            var next = Transform(x, y);
+            // Two dots thick, so it reads as a solid line
             canvas.Line(previous.X, previous.Y, next.X, next.Y, TrackColour);
+            canvas.Line(previous.X + 1, previous.Y, next.X + 1, next.Y, TrackColour);
+            canvas.Line(previous.X, previous.Y + 1, next.X, next.Y + 1, TrackColour);
             previous = next;
         }
 
@@ -291,7 +444,12 @@ public sealed class PitWallTrackMapDisplay(
             }
             if (car.Focus)
             {
-                canvas.Label((cx / 2) + 1, cy / 4, car.Tla, new Style(foreground: car.Colour, decoration: Decoration.Bold));
+                canvas.Label(
+                    (cx / 2) + 1,
+                    cy / 4,
+                    car.Tla,
+                    new Style(foreground: car.Colour, decoration: Decoration.Bold)
+                );
             }
         }
     }

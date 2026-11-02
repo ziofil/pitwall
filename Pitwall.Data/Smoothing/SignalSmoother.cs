@@ -9,6 +9,12 @@ namespace Pitwall.Data;
 /// samples, linear or constant otherwise), and evaluates it at the requested time.
 /// Callers evaluate slightly behind the newest data, so the value is mostly interpolated between
 /// real samples rather than extrapolated beyond them.
+/// <para>
+/// A new sample changes the fitted curve. Switching to the new curve at once would make the shown
+/// value jump, so instead the value blends from the old curve to the new one over
+/// <paramref name="blend"/>, keeping it continuous. Only a real discontinuity (see
+/// <paramref name="resetThreshold"/>) shows as a jump.
+/// </para>
 /// </summary>
 /// <param name="window">Samples older than this, relative to the newest one, are dropped.</param>
 /// <param name="maxExtrapolation">
@@ -19,17 +25,35 @@ namespace Pitwall.Data;
 /// A sample this far from what the fit predicted is treated as a discontinuity (a pit stop, a
 /// change of car ahead) and restarts the series, so the jump isn't smeared across the fit.
 /// </param>
+/// <param name="blend">How long the value takes to move from the old curve to a new one.</param>
 /// <param name="maxSamples">How many recent samples to fit through.</param>
 public sealed class SignalSmoother(
     TimeSpan window,
     TimeSpan maxExtrapolation,
     double resetThreshold,
+    TimeSpan blend,
     int maxSamples = 6
 )
 {
+    /// <summary>
+    /// What is shown: the current fitted curve, blending in from the curve shown before it.
+    /// </summary>
+    private sealed record Curve(
+        double[]? Coefficients,
+        DateTimeOffset Origin,
+        double First,
+        double Last,
+        Curve? Previous,
+        DateTimeOffset BlendStart
+    );
+
     private sealed class Series
     {
         public readonly List<(DateTimeOffset Time, double Value)> Samples = [];
+        public Curve? Curve;
+
+        // The latest time this series was shown at, which is where a blend starts from
+        public DateTimeOffset LastShown;
     }
 
     private readonly ConcurrentDictionary<string, Series> _series = new();
@@ -48,20 +72,32 @@ public sealed class SignalSmoother(
                 return;
             }
 
-            if (
-                samples.Count > 0
-                && Evaluate(samples, time, maxExtrapolation) is { } predicted
-                && Math.Abs(predicted - value) > resetThreshold
-            )
-            {
+            // Compare with the last real sample, not the curve's trend, which may be well past it
+            var reset = samples.Count > 0 && Math.Abs(samples[^1].Value - value) > resetThreshold;
+            if (reset)
                 samples.Clear();
-            }
 
             samples.Add((time, value));
             var oldest = time - window;
             samples.RemoveAll(x => x.Time < oldest);
             if (samples.Count > maxSamples)
                 samples.RemoveRange(0, samples.Count - maxSamples);
+
+            // Blend from whatever was being shown, unless this is a discontinuity to show as-is
+            var previous = reset ? null : series.Curve;
+            if (previous?.Previous is not null && series.LastShown >= previous.BlendStart + blend)
+            {
+                // The previous blend has finished, so its older curve is no longer needed
+                previous = previous with
+                {
+                    Previous = null,
+                };
+            }
+            series.Curve = Fit(
+                samples,
+                previous,
+                series.LastShown > DateTimeOffset.MinValue ? series.LastShown : time
+            );
         }
     }
 
@@ -76,39 +112,69 @@ public sealed class SignalSmoother(
             return false;
         lock (series)
         {
-            if (Evaluate(series.Samples, at, maxExtrapolation) is not { } result)
+            if (series.Curve is null)
                 return false;
-            value = result;
+            if (at > series.LastShown)
+                series.LastShown = at;
+            value = Evaluate(series.Curve, at);
             return true;
         }
     }
 
-    private static double? Evaluate(
+    private Curve Fit(
         List<(DateTimeOffset Time, double Value)> samples,
-        DateTimeOffset at,
-        TimeSpan maxExtrapolation
+        Curve? previous,
+        DateTimeOffset blendStart
     )
     {
-        if (samples.Count == 0)
-            return null;
-        if (samples.Count == 1)
-            return samples[0].Value;
-
         // Work in seconds relative to the newest sample to keep the numbers well conditioned
         var origin = samples[^1].Time;
         var first = (samples[0].Time - origin).TotalSeconds;
-        var t = Math.Clamp((at - origin).TotalSeconds, first, maxExtrapolation.TotalSeconds);
+        var coefficients = samples.Count switch
+        {
+            1 => [samples[0].Value],
+            < 4 => FitPolynomial(samples, origin, 1),
+            _ => FitPolynomial(samples, origin, 2),
+        };
+        coefficients ??= [samples[^1].Value];
+        return new Curve(
+            coefficients,
+            origin,
+            first,
+            maxExtrapolation.TotalSeconds,
+            previous,
+            blendStart
+        );
+    }
 
-        var degree = samples.Count >= 4 ? 2 : 1;
-        var coefficients = FitPolynomial(samples, origin, degree);
-        if (coefficients is null)
-            return samples[^1].Value;
+    private double Evaluate(Curve curve, DateTimeOffset at)
+    {
+        var value = EvaluateFit(curve, at);
+        if (curve.Previous is null || blend <= TimeSpan.Zero)
+            return value;
+
+        var progress = (at - curve.BlendStart) / blend;
+        if (progress >= 1)
+            return value;
+        if (progress <= 0)
+            return Evaluate(curve.Previous, at);
+
+        // Smoothstep, so the value eases from the old curve on to the new one
+        var weight = progress * progress * (3 - (2 * progress));
+        var old = Evaluate(curve.Previous, at);
+        return old + ((value - old) * weight);
+    }
+
+    private static double EvaluateFit(Curve curve, DateTimeOffset at)
+    {
+        var coefficients = curve.Coefficients!;
+        var t = Math.Clamp((at - curve.Origin).TotalSeconds, curve.First, curve.Last);
 
         // When extrapolating, follow only the straight-line trend: a quadratic can run away
         if (t > 0)
         {
             var slope = coefficients.Length > 1 ? coefficients[1] : 0;
-            return Polynomial(coefficients, 0) + (slope * t);
+            return coefficients[0] + (slope * t);
         }
         return Polynomial(coefficients, t);
     }
@@ -161,7 +227,10 @@ public sealed class SignalSmoother(
             if (best != pivot)
             {
                 for (var column = 0; column <= size; column++)
-                    (matrix[pivot, column], matrix[best, column]) = (matrix[best, column], matrix[pivot, column]);
+                    (matrix[pivot, column], matrix[best, column]) = (
+                        matrix[best, column],
+                        matrix[pivot, column]
+                    );
             }
             for (var row = 0; row < size; row++)
             {

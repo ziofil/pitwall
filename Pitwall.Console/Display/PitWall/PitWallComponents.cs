@@ -1,6 +1,6 @@
+using Pitwall.Data;
 using Spectre.Console;
 using Spectre.Console.Rendering;
-using Pitwall.Data;
 
 namespace Pitwall.Console;
 
@@ -60,9 +60,10 @@ public sealed class PitWallComponents(
 
         var lap = lapCount.Latest;
         // The lap count is only meaningful in races
-        var lapText = lap?.CurrentLap is null || !sessionInfo.Latest.IsRace()
-            ? ""
-            : $"LAP [bold]{lap.CurrentLap}[/]/{lap.TotalLaps}";
+        var lapText =
+            lap?.CurrentLap is null || !sessionInfo.Latest.IsRace()
+                ? ""
+                : $"LAP [bold]{lap.CurrentLap}[/]/{lap.TotalLaps}";
 
         var localOffset = string.IsNullOrWhiteSpace(sessionInfo.Latest.GmtOffset)
             ? TimeSpan.Zero
@@ -75,7 +76,8 @@ public sealed class PitWallComponents(
             ? ""
             : $"AIR {w.AirTemp}° TRK {w.TrackTemp}° HUM {w.Humidity}%{rain}";
 
-        var session = $"{sessionInfo.Latest.Meeting?.Circuit?.ShortName} {sessionInfo.Latest.Name}".Trim();
+        var session =
+            $"{sessionInfo.Latest.Meeting?.Circuit?.ShortName} {sessionInfo.Latest.Name}".Trim();
 
         var top = new[]
         {
@@ -101,7 +103,9 @@ public sealed class PitWallComponents(
         );
 
         return new Rows(
-            new SingleLine(string.Join("[grey] │ [/]", top.Where(x => !string.IsNullOrWhiteSpace(x)))),
+            new SingleLine(
+                string.Join("[grey] │ [/]", top.Where(x => !string.IsNullOrWhiteSpace(x)))
+            ),
             new SingleLine(tabs)
         );
     }

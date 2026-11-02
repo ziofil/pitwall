@@ -101,11 +101,6 @@ public class TimingService(
             ProcessData("Position.z", obj["Position.z"]?.ToString(), DateTimeOffset.UtcNow);
             ProcessData("TeamRadio", obj["TeamRadio"]?.ToString(), DateTimeOffset.UtcNow);
             ProcessData(
-                "ChampionshipPrediction",
-                obj["ChampionshipPrediction"]?.ToString(),
-                DateTimeOffset.UtcNow
-            );
-            ProcessData(
                 "ExtrapolatedClock",
                 obj["ExtrapolatedClock"]?.ToString(),
                 DateTimeOffset.UtcNow
@@ -228,9 +223,6 @@ public class TimingService(
                 // if Captures is an array, make it an indexed dictionary instead
                 json["Captures"] = ArrayToIndexedDictionary(json["Captures"]);
                 SendToProcessor<TeamRadioDataPoint>(json);
-                break;
-            case LiveTimingDataType.ChampionshipPrediction:
-                SendToProcessor<ChampionshipPredictionDataPoint>(json);
                 break;
             case LiveTimingDataType.PitStopSeries:
                 var pitStopSeriesDrivers = json["PitTimes"]?.AsObject() ?? [];
