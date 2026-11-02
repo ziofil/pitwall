@@ -138,7 +138,9 @@ If the login window doesn't work on your system, you can copy the token yourself
 
 ## Configuration
 
-Settings come from a `config.json` file, command line options or environment variables. Run `pitwall info` to see what's in use. Add `"$schema": "https://raw.githubusercontent.com/ziofil/pitwall/refs/heads/master/config.schema.json"` to the file for autocompletion in editors.
+The easiest way to change settings is **Settings** in the menu: every setting with its current value, changed with the arrow keys and <kbd>Enter</kbd> and saved to the config file straight away. Folders and addresses can be typed or pasted, and settings that only apply after a restart say so.
+
+Settings can also come from the `config.json` file itself, command line options or environment variables; command line options and environment variables win over the file, and the Settings screen tells you when one is in the way. Run `pitwall info` to see what's in use. Add `"$schema": "https://raw.githubusercontent.com/ziofil/pitwall/refs/heads/master/config.schema.json"` to the file for autocompletion in editors.
 
 | Setting | Command line | Environment variable | What it does |
 | --- | --- | --- | --- |

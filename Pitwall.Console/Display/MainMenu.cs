@@ -120,6 +120,13 @@ public sealed class MainMenu(
                     )
                 );
             }
+            items.Add(
+                new(
+                    "Settings",
+                    "Folders, notifications, image drawing, Kodi sync and more, saved to the config file.",
+                    () => Go(Screen.Settings)
+                )
+            );
             items.Add(new("Quit", "Close Pitwall.", () => Go(Screen.Shutdown)));
             return items;
         }

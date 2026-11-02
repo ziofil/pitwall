@@ -58,6 +58,8 @@ public abstract class SampleSessionFixture
             .AddSingleton<Graphics.ITerminalImages>(x => x.GetRequiredService<NoTerminalImages>())
             .AddSingleton<StartSimulatedSessionOptions>()
             .AddSingleton<MainMenu>()
+            .AddSingleton<SettingsStore>()
+            .AddSingleton<SettingsDisplay>()
             .AddSingleton<RadioTranscriber>()
             .AddSingleton<MainDisplay>()
             .AddSingleton<SelectTeamDisplay>()

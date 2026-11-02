@@ -9,6 +9,7 @@ public enum Screen
     Info,
     ManageAccount,
     SelectTeam,
+    Settings,
     PitWallTiming,
     PitWallStrategy,
     PitWallTelemetry,

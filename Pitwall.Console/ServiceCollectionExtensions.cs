@@ -14,6 +14,7 @@ public static partial class ServiceCollectionExtensions
 
         services.AddSingleton<PitWallContext>();
         services.AddSingleton<MainMenu>();
+        services.AddSingleton<SettingsStore>();
         services.AddSingleton<RadioTranscriber>();
         services.AddSingleton<Graphics.ITerminalImages, Graphics.TerminalImages>();
         services.AddSingleton<PitWallComponents>();

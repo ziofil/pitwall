@@ -216,6 +216,13 @@ public class ConsoleLoop(
 
     private void UpdateInputFooter(Layout layout)
     {
+        if (state.TextInput is not null)
+        {
+            layout["Footer"]
+                .Update(new Markup("[[⏎]] Save   [[Esc]] Cancel   [grey]type or paste[/]"));
+            return;
+        }
+
         var commandDescriptions = inputHandlers
             .Where(x => x.IsEnabled && x.ApplicableScreens.Contains(state.CurrentScreen))
             .OrderBy(x => x.Sort)
@@ -224,6 +231,38 @@ public class ConsoleLoop(
         var columns = new Columns(commandDescriptions.Select(x => new Markup(x)));
         columns.Collapse();
         layout["Footer"].Update(columns);
+    }
+
+    private async Task HandleTextInputAsync(TextInput input, byte[] bytes)
+    {
+        // A lone Esc cancels; escape sequences (arrow keys and so on) are ignored
+        if (bytes is [ESC])
+        {
+            state.TextInput = null;
+            return;
+        }
+        if (bytes is [ESC, ..])
+            return;
+
+        foreach (var character in System.Text.Encoding.UTF8.GetString(bytes))
+        {
+            switch (character)
+            {
+                case '\r' or '\n':
+                    input.Error = await input.Commit(input.Text.Trim());
+                    if (input.Error is null)
+                        state.TextInput = null;
+                    return;
+                case '\b' or (char)127:
+                    if (input.Text.Length > 0)
+                        input.Text = input.Text[..^1];
+                    break;
+                case var c when !char.IsControl(c):
+                    input.Text += c;
+                    input.Error = null;
+                    break;
+            }
+        }
     }
 
     private async Task HandleInputsAsync(CancellationToken cancellationToken = default)
@@ -243,7 +282,16 @@ public class ConsoleLoop(
             }
 #pragma warning restore RS0030 // Do not use banned APIs
 
-            await Terminal.ReadAsync(inputBuffer);
+            var read = await Terminal.ReadAsync(inputBuffer);
+
+            // Typing into a text box: every character read (including pasted text, which
+            // arrives several characters at a time) goes into it
+            if (state.TextInput is { } textInput)
+            {
+                await HandleTextInputAsync(textInput, inputBuffer.AsSpan(0, read).ToArray());
+                return;
+            }
+
             logger.LogDebug("Read in input: {Input}", string.Join(',', inputBuffer));
 
             if (

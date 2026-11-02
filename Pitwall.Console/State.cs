@@ -27,6 +27,12 @@ public record State
     /// </summary>
     public bool SessionStarted { get; set; }
 
+    /// <summary>
+    /// A text box being typed in, e.g. a folder path on the settings screen. While set, typed
+    /// and pasted text goes into it instead of to the screen's keys.
+    /// </summary>
+    public TextInput? TextInput { get; set; }
+
     /// <summary>When the stream delay was last changed, so it can be highlighted for a moment.</summary>
     public DateTimeOffset DelayChangedAt { get; set; } = DateTimeOffset.MinValue;
 
@@ -38,4 +44,19 @@ public record State
         delay.TotalDays >= 1 ? $@"{(int)delay.TotalDays}d {delay:hh\:mm\:ss}"
         : delay.TotalHours >= 1 ? $@"{(int)delay.TotalHours}:{delay:mm\:ss}"
         : $@"{(int)delay.TotalMinutes}:{delay:ss}";
+}
+
+/// <summary>A text box being edited: Enter saves, Esc cancels, Backspace deletes.</summary>
+/// <param name="commit">
+/// Called with the text on Enter. Returns an error to show, keeping the box open, or
+/// <c>null</c> to close it.
+/// </param>
+public sealed class TextInput(string text, Func<string, Task<string?>> commit)
+{
+    public string Text { get; set; } = text;
+
+    /// <summary>Why the last Enter was refused, if it was.</summary>
+    public string? Error { get; set; }
+
+    public Func<string, Task<string?>> Commit => commit;
 }

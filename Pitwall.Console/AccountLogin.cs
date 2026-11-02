@@ -22,13 +22,7 @@ public sealed class AccountLogin(Formula1Account accountService, ILogger<Account
 
     public async Task LogoutAsync()
     {
-        var configFileJson = await ReadConfigFileAsync();
-        configFileJson.Remove(nameof(ConsoleOptions.Formula1AccessToken));
-
-        await File.WriteAllTextAsync(
-            ConsoleOptions.ConfigFilePath,
-            configFileJson.ToJsonString(ConsoleSerializerContext.Pretty.Options)
-        );
+        await ConfigFile.SetAsync(nameof(ConsoleOptions.Formula1AccessToken), null);
 
         // Stop using the token in this run too, not just from the next start
         accountService.Refresh(null);
@@ -45,12 +39,7 @@ public sealed class AccountLogin(Formula1Account accountService, ILogger<Account
         // We read the file rather than just save the config to try and avoid changing other contents in the file
         // e.g. we might have config set by environment variables that shouldn't end up in the file
         // or the file might have keys in it that we don't read in to config, but we shouldn't remove from the file.
-        var configFileJson = await ReadConfigFileAsync();
-        configFileJson[nameof(ConsoleOptions.Formula1AccessToken)] = token;
-        await File.WriteAllTextAsync(
-            ConsoleOptions.ConfigFilePath,
-            configFileJson.ToJsonString(ConsoleSerializerContext.Pretty.Options)
-        );
+        await ConfigFile.SetAsync(nameof(ConsoleOptions.Formula1AccessToken), token);
 
         accountService.Refresh(token);
 
@@ -165,15 +154,6 @@ public sealed class AccountLogin(Formula1Account accountService, ILogger<Account
         {
             return cookieHandling;
         }
-    }
-
-    private static async Task<JsonObject> ReadConfigFileAsync()
-    {
-        var configFileContents = await File.ReadAllTextAsync(ConsoleOptions.ConfigFilePath);
-        return JsonNode
-                .Parse(configFileContents, new() { PropertyNameCaseInsensitive = true })
-                ?.AsObject()
-            ?? throw new InvalidOperationException("Unable to parse config JSON");
     }
 
     public enum LoginStatus

@@ -74,6 +74,17 @@ public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<Samp
     }
 
     [Fact]
+    public async Task SettingsScreenListsEverySetting()
+    {
+        var text = await RenderAsync<SettingsDisplay>();
+
+        Assert.Contains("Data folder", text);
+        Assert.Contains("Kodi address", text);
+        Assert.Contains("after a restart", text);
+        Assert.Contains("Saved to", text);
+    }
+
+    [Fact]
     public async Task TeamListShowsEveryTeam()
     {
         var text = await RenderAsync<SelectTeamDisplay>();
