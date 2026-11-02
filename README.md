@@ -17,7 +17,6 @@ The layouts follow what you can see of real pit walls: the black FIA timing moni
 - [F1 TV account](#f1-tv-account)
 - [Configuration](#configuration)
 - [Recording, replays and imports](#recording-replays-and-imports)
-- [Local API and video player sync](#local-api-and-video-player-sync)
 - [Building and contributing](#building-and-contributing)
 - [Credits and licence](#credits-and-licence)
 
@@ -138,7 +137,7 @@ If the login window doesn't work on your system, you can copy the token yourself
 
 ## Configuration
 
-The easiest way to change settings is **Settings** in the menu: every setting with its current value, changed with the arrow keys and <kbd>Enter</kbd> and saved to the config file straight away. Folders and addresses can be typed or pasted, and settings that only apply after a restart say so.
+The easiest way to change settings is **Settings** in the menu: every setting with its current value, changed with the arrow keys and <kbd>Enter</kbd> and saved to the config file straight away. Folders can be typed or pasted, and settings that only apply after a restart say so.
 
 Settings can also come from the `config.json` file itself, command line options or environment variables; command line options and environment variables win over the file, and the Settings screen tells you when one is in the way. Run `pitwall info` to see what's in use. Add `"$schema": "https://raw.githubusercontent.com/ziofil/pitwall/refs/heads/master/config.schema.json"` to the file for autocompletion in editors.
 
@@ -147,14 +146,12 @@ Settings can also come from the `config.json` file itself, command line options 
 | `dataDirectory` | `--data-directory` | `PITWALL_DATADIRECTORY` | Where sessions are recorded to and replayed from. Whisper models are stored here too. |
 | `logDirectory` | `--log-directory` | `PITWALL_LOGDIRECTORY` | Where log files are written. |
 | `verbose` | `-v`, `--verbose` | `PITWALL_VERBOSE` | More detailed logs. Default `false`. |
-| `apiEnabled` | `--with-api` | `PITWALL_APIENABLED` | Serve the [local API](#local-api-and-video-player-sync) on port 61937. Default `false`. |
 | `notify` | `--notify` | `PITWALL_NOTIFY` | Ring the terminal bell for new race control messages. Default `true`. |
 | `preferFfmpegPlayback` | `--prefer-ffmpeg` | `PITWALL_PREFERFFMPEGPLAYBACK` | Play radio with `ffplay` instead of `afplay`/`mpg123`. Default `false`. |
 | `forceGraphicsProtocol` | `--force-graphics-protocol` | `PITWALL_FORCEGRAPHICSPROTOCOL` | Use this inline graphics protocol instead of detecting one: `Kitty`, `Sixel` or `iTerm`. |
 | `preventDisplaySleep` | `--prevent-sleep` | `PITWALL_PREVENTDISPLAYSLEEP` | Keep the display awake while Pitwall runs. Default `false`. |
 | `enablePositionSmoothing` | | `PITWALL_ENABLEPOSITIONSMOOTHING` | Glide cars between position updates (they show slightly behind live). Default `true`. |
 | `formula1AccessToken` | | `PITWALL_FORMULA1ACCESSTOKEN` | Your F1 TV token, normally set by logging in. |
-| `externalPlayerSync.*` | | `PITWALL_EXTERNALPLAYERSYNC__*` | Pause the session clock with your video player, see [below](#local-api-and-video-player-sync). |
 
 Default locations:
 
@@ -177,15 +174,6 @@ pitwall import 2025                                          # list the meetings
 pitwall import 2025 --meeting-key 1256                       # list a meeting's sessions
 pitwall import 2025 --meeting-key 1256 --session-key 10006   # download one
 ```
-
-## Local API and video player sync
-
-With `apiEnabled` on, Pitwall serves an HTTP API at `http://localhost:61937`. Browse it at [/swagger](http://localhost:61937/swagger/index.html).
-
-- `POST /control` with `{"operation": "PauseClock"}`, `"ResumeClock"` or `"ToggleClock"` controls the session clock, so you can hook Pitwall up to a remote, a stream deck or your own scripts.
-- `GET /data/<type>/latest` returns the latest raw data of each feed, e.g. `TimingData` or `CarData`. The [data models](Pitwall.Data/Models/TimingDataPoints/) describe what's in each.
-
-If you watch with [Kodi](https://kodi.tv), Pitwall can pause its clock whenever you pause the video, keeping the pit wall in step with what you see. Set `externalPlayerSync.enabled` to `true`, `externalPlayerSync.serviceType` to `Kodi` and `externalPlayerSync.url` to Kodi's WebSocket address, usually `ws://localhost:9090/jsonrpc`. `pitwall info` shows whether it's connected.
 
 ## Building and contributing
 

@@ -13,8 +13,9 @@ public static partial class CommandHandler
         );
 
         var app = builder.Build();
+        var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Pitwall");
 
-        await EnsureConfigFileExistsAsync(app.Logger);
+        await EnsureConfigFileExistsAsync(logger);
 
         var accountService = app.Services.GetRequiredService<Formula1Account>();
         var existingPayload = accountService.Payload;

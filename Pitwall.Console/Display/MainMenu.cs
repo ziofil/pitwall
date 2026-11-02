@@ -123,7 +123,7 @@ public sealed class MainMenu(
             items.Add(
                 new(
                     "Settings",
-                    "Folders, notifications, image drawing, Kodi sync and more, saved to the config file.",
+                    "Folders, notifications, image drawing and more, saved to the config file.",
                     () => Go(Screen.Settings)
                 )
             );

@@ -50,13 +50,13 @@ public sealed class SettingsTests : IDisposable
     [Fact]
     public async Task RestartSettingsShowTheSavedValueAsPending()
     {
-        var api = Find("ApiEnabled");
+        var sleep = Find("PreventDisplaySleep");
 
-        await _store.SaveAsync(api, _store.Next(api));
+        await _store.SaveAsync(sleep, _store.Next(sleep));
 
-        Assert.Equal("Off", _store.Value(api));
-        Assert.Equal("On", _store.Pending(api));
-        Assert.True(File()["ApiEnabled"]!.GetValue<bool>());
+        Assert.Equal("Off", _store.Value(sleep));
+        Assert.Equal("On", _store.Pending(sleep));
+        Assert.True(File()["PreventDisplaySleep"]!.GetValue<bool>());
     }
 
     [Fact]
@@ -82,16 +82,9 @@ public sealed class SettingsTests : IDisposable
         Assert.Null(await _store.SaveAsync(Find("DataDirectory"), folder));
         Assert.True(Directory.Exists(folder));
 
-        Assert.NotNull(
-            await _store.SaveAsync(Find("ExternalPlayerSync:Url"), "http://not-a-websocket")
-        );
-        Assert.Null(
-            await _store.SaveAsync(Find("ExternalPlayerSync:Url"), "ws://localhost:9090/jsonrpc")
-        );
-        Assert.Equal(
-            "ws://localhost:9090/jsonrpc",
-            File()["ExternalPlayerSync"]!["Url"]!.GetValue<string>()
-        );
+        // Nested settings are written as nested objects
+        await ConfigFile.SetAsync("Section:Value", "x");
+        Assert.Equal("x", File()["Section"]!["Value"]!.GetValue<string>());
     }
 
     [Fact]

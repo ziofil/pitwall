@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Options;
-using Pitwall.Console.ExternalPlayerSync;
 using Pitwall.Data;
 using Spectre.Console;
 using Spectre.Console.Rendering;
@@ -9,7 +8,6 @@ namespace Pitwall.Console;
 
 public sealed class InfoDisplay(
     TerminalInfoProvider terminalInfo,
-    WebSocketSynchroniser synchroniser,
     Formula1Account accountService,
     IOptions<ConsoleOptions> options
 ) : IDisplay
@@ -31,7 +29,7 @@ public sealed class InfoDisplay(
                 ConsoleOptions.ConfigFilePath
             )} ({ConsoleOptions.ConfigFilePath})
             See https://github.com/ziofil/pitwall#configuration for information on how to configure these options.
-            [dim]{accountService.Payload}[/]
+            [dim]{Markup.Escape(accountService.Payload?.ToString() ?? "")}[/]
 
             [bold]Terminal Diagnostics[/]
             [bold]TERM_PROGRAM:[/]        {Environment.GetEnvironmentVariable("TERM_PROGRAM")}
@@ -44,13 +42,6 @@ public sealed class InfoDisplay(
             [bold]Runtime Identifier:[/]  {RuntimeInformation.RuntimeIdentifier}
             
             [bold]OS:[/] {RuntimeInformation.OSDescription}
-
-            [bold]External Service Sync[/]
-            [bold]Service Status:[/]      {synchroniser.State} / {synchroniser.ExecuteTask?.Status}
-            [bold]Enabled:[/]             {options.Value.ExternalPlayerSync?.Enabled ?? false}
-            [bold]Service Type:[/]        {options.Value.ExternalPlayerSync?.ServiceType}
-            [bold]Url:[/]                 {options.Value.ExternalPlayerSync?.Url}
-            [bold]Connect Interval:[/]    {options.Value.ExternalPlayerSync?.WebSocketConnectInterval}
             """;
 
         return Task.FromResult<IRenderable>(new Panel(new Markup(content)).Expand());

@@ -47,9 +47,6 @@ public sealed record ConsoleOptions : LiveTimingOptions
     /// </summary>
     public bool EnablePositionSmoothing { get; set; } = true;
 
-    /// <inheritdoc cref="ExternalPlayerSync.SyncOptions" />
-    public ExternalPlayerSync.SyncOptions? ExternalPlayerSync { get; set; }
-
     private static string GetConfigFilePath()
     {
         if (OperatingSystem.IsWindows())

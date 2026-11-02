@@ -13,7 +13,7 @@ public static class ConfigFile
     /// <summary>The file changed: Pitwall's config file, or another one in tests.</summary>
     internal static string FilePath { get; set; } = ConsoleOptions.ConfigFilePath;
 
-    /// <summary>Sets a setting, by its path such as <c>Notify</c> or <c>ExternalPlayerSync:Url</c>.</summary>
+    /// <summary>Sets a setting, by its path such as <c>Notify</c>, with <c>:</c> between levels for nested settings.</summary>
     /// <param name="value">The new value, or <c>null</c> to remove the setting and use the default.</param>
     public static async Task SetAsync(string path, JsonNode? value)
     {

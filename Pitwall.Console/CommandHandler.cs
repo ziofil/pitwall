@@ -1,9 +1,9 @@
 using System.CommandLine;
-using Pitwall.Console.ExternalPlayerSync;
 using Pitwall.Console.Graphics;
 using Pitwall.Data;
 using Serilog;
 using Serilog.Events;
+using Vezel.Cathode.Extensions.Logging;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
 
 namespace Pitwall.Console;
@@ -15,10 +15,6 @@ public static partial class CommandHandler
         var isVerboseOption = new Option<bool?>("--verbose", "-v")
         {
             Description = "Whether verbose logging should be enabled",
-        };
-        var isApiEnabledOption = new Option<bool?>("--with-api")
-        {
-            Description = "Whether the API endpoint should be exposed at http://localhost:61937",
         };
         var dataDirectoryOption = new Option<DirectoryInfo?>("--data-directory")
         {
@@ -51,7 +47,6 @@ public static partial class CommandHandler
         var rootCommand = new RootCommand("pitwall")
         {
             isVerboseOption,
-            isApiEnabledOption,
             dataDirectoryOption,
             logDirectoryOption,
             notifyOption,
@@ -62,7 +57,6 @@ public static partial class CommandHandler
 
         rootCommand.SetAction(parseResult =>
             Root(
-                parseResult.GetValue(isApiEnabledOption),
                 parseResult.GetValue(dataDirectoryOption),
                 parseResult.GetValue(logDirectoryOption),
                 parseResult.GetValue(isVerboseOption),
@@ -197,8 +191,7 @@ public static partial class CommandHandler
         await rootCommand.Parse(args).InvokeAsync(new(), cancellationToken);
     }
 
-    private static WebApplicationBuilder GetBuilder(
-        bool? isApiEnabled = false,
+    private static HostApplicationBuilder GetBuilder(
         DirectoryInfo? dataDirectory = null,
         DirectoryInfo? logDirectory = null,
         bool? isVerbose = false,
@@ -209,16 +202,12 @@ public static partial class CommandHandler
         bool useConsoleLogging = false
     )
     {
-        var builder = WebApplication.CreateEmptyBuilder(new() { ApplicationName = "pitwall" });
+        var builder = Host.CreateEmptyApplicationBuilder(new() { ApplicationName = "pitwall" });
 
         var commandLineOpts = new Dictionary<string, string?>();
         if (isVerbose is not null)
         {
             commandLineOpts.Add(nameof(ConsoleOptions.Verbose), isVerbose.ToString());
-        }
-        if (isApiEnabled is not null)
-        {
-            commandLineOpts.Add(nameof(ConsoleOptions.ApiEnabled), isApiEnabled.ToString());
         }
         if (dataDirectory is not null)
         {
@@ -303,10 +292,7 @@ public static partial class CommandHandler
             })
             .Configure<ConsoleOptions>(builder.Configuration)
             .AddLiveTiming(builder.Configuration)
-            .AddSingleton<WebSocketSynchroniser>()
             .AddSingleton<AccountLogin>();
-
-        builder.WebHost.UseServer(new NullServer());
 
         return builder;
     }

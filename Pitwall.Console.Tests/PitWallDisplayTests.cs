@@ -79,7 +79,7 @@ public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<Samp
         var text = await RenderAsync<SettingsDisplay>();
 
         Assert.Contains("Data folder", text);
-        Assert.Contains("Kodi address", text);
+        Assert.Contains("Image protocol", text);
         Assert.Contains("after a restart", text);
         Assert.Contains("Saved to", text);
     }

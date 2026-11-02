@@ -107,31 +107,10 @@ public sealed class SettingsStore(
             [Automatic, .. Enum.GetNames<GraphicsProtocol>()]
         ),
         new(
-            nameof(LiveTimingOptions.ApiEnabled),
-            "Local API",
-            "Serve the HTTP API on port 61937, for remotes and your own scripts.",
-            SettingKind.Toggle,
-            AppliesNow: false
-        ),
-        new(
             nameof(LiveTimingOptions.Verbose),
             "Detailed logs",
             "Write more detailed logs, for troubleshooting.",
             SettingKind.Toggle,
-            AppliesNow: false
-        ),
-        new(
-            "ExternalPlayerSync:Enabled",
-            "Kodi sync",
-            "Pause the session clock when you pause Kodi, keeping the pit wall in step with the video.",
-            SettingKind.Toggle,
-            AppliesNow: false
-        ),
-        new(
-            "ExternalPlayerSync:Url",
-            "Kodi address",
-            "Kodi's WebSocket address, usually ws://localhost:9090/jsonrpc.",
-            SettingKind.Text,
             AppliesNow: false
         ),
     ];
@@ -152,10 +131,7 @@ public sealed class SettingsStore(
             nameof(ConsoleOptions.PreventDisplaySleep) => OnOff(options.PreventDisplaySleep),
             nameof(ConsoleOptions.ForceGraphicsProtocol) =>
                 options.ForceGraphicsProtocol?.ToString() ?? Automatic,
-            nameof(LiveTimingOptions.ApiEnabled) => OnOff(options.ApiEnabled),
             nameof(LiveTimingOptions.Verbose) => OnOff(options.Verbose),
-            "ExternalPlayerSync:Enabled" => OnOff(options.ExternalPlayerSync?.Enabled ?? false),
-            "ExternalPlayerSync:Url" => options.ExternalPlayerSync?.Url?.ToString() ?? "",
             _ => "",
         };
     }
@@ -224,17 +200,6 @@ public sealed class SettingsStore(
                 node = value;
                 break;
             default:
-                if (
-                    setting.Path == "ExternalPlayerSync:Url"
-                    && !string.IsNullOrEmpty(value)
-                    && !(
-                        Uri.TryCreate(value, UriKind.Absolute, out var uri)
-                        && uri.Scheme is "ws" or "wss"
-                    )
-                )
-                {
-                    return "Enter a WebSocket address, starting ws:// or wss://";
-                }
                 node = string.IsNullOrEmpty(value) ? null : value;
                 break;
         }

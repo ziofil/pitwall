@@ -83,7 +83,6 @@ public sealed class Screenshots
             // Needed to create the other screens and key handlers, but never asked anything here
             .AddSingleton<TerminalInfoProvider>()
             .AddSingleton<Pitwall.Console.Audio.AudioPlayer>()
-            .AddSingleton<Pitwall.Console.ExternalPlayerSync.WebSocketSynchroniser>()
             .AddSingleton<ITerminalImages>(images)
             .BuildServiceProvider();
 

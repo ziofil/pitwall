@@ -8,9 +8,6 @@
     "logDirectory": {
       "type": "string"
     },
-    "apiEnabled": {
-      "type": "boolean"
-    },
     "verbose": {
       "type": "boolean"
     },
@@ -43,37 +40,6 @@
     "enablePositionSmoothing": {
       "type": "boolean",
       "description": "Whether car positions on the track page glide between updates by fitting a line to\nrecent samples, rather than jumping to each raw sample as it arrives. The smoothed dot\nlags live slightly so it can be fitted from the samples around it.\nDefaults to \u003Csee langword=\u0022true\u0022 /\u003E."
-    },
-    "externalPlayerSync": {
-      "description": "Options to configure the external player synchronisation service",
-      "type": [
-        "null",
-        "object"
-      ],
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "description": "Whether the player sync is enabled or not."
-        },
-        "serviceType": {
-          "description": "What the external service we\u0027re syncing against is.\nThis determines what API calls pitwall will be making, and how it will make them.",
-          "enum": [
-            "Kodi"
-          ]
-        },
-        "url": {
-          "type": [
-            "null",
-            "string"
-          ],
-          "format": "uri",
-          "description": "The URL where the external players API can be found."
-        },
-        "webSocketConnectInterval": {
-          "type": "integer",
-          "description": "The amount of time, in milliseconds, to wait between attempts to connect to the external services\nWebSocket interface."
-        }
-      }
     }
   }
 }

@@ -418,3 +418,5 @@ config.json
 
 xcuserdata/
 logs/
+# Whisper models downloaded when running with --data-directory "Sample Data"
+Sample Data/models/

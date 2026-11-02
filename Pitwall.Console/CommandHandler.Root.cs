@@ -1,8 +1,4 @@
-using System.Text.Json;
-using System.Text.Json.Serialization.Metadata;
-using Pitwall.Console.Api;
 using Pitwall.Console.Audio;
-using Pitwall.Console.ExternalPlayerSync;
 using Pitwall.Console.Graphics;
 using Pitwall.Data;
 
@@ -11,7 +7,6 @@ namespace Pitwall.Console;
 public static partial class CommandHandler
 {
     public static async Task Root(
-        bool? isApiEnabled,
         DirectoryInfo? dataDirectory,
         DirectoryInfo? logDirectory,
         bool? isVerbose,
@@ -22,7 +17,6 @@ public static partial class CommandHandler
     )
     {
         var builder = GetBuilder(
-            isApiEnabled: isApiEnabled,
             dataDirectory: dataDirectory,
             logDirectory: logDirectory,
             isVerbose: isVerbose,
@@ -40,48 +34,14 @@ public static partial class CommandHandler
             .AddSingleton<INotifyHandler, NotifyHandler>()
             .AddSingleton<TerminalInfoProvider>()
             .AddSingleton<AudioPlayer>()
-            .AddHostedService(sp => sp.GetRequiredService<ConsoleLoop>())
-            .AddHostedService(sp => sp.GetRequiredService<WebSocketSynchroniser>());
+            .AddHostedService(sp => sp.GetRequiredService<ConsoleLoop>());
 
         var options = builder.Configuration.Get<ConsoleOptions>() ?? new();
 
-        if (options.ApiEnabled)
-        {
-            builder.WebHost.UseKestrel(opt => opt.ListenAnyIP(0xF1F1)); // listens on 61937
-
-            builder.Services.AddOpenApi(
-                "v1",
-                opts =>
-                {
-                    opts.CreateSchemaReferenceId = CreateSchemaReferenceId;
-                    opts.OpenApiVersion = Microsoft.OpenApi.OpenApiSpecVersion.OpenApi3_0;
-                }
-            );
-
-            builder.Services.AddRouting().AddEndpointsApiExplorer();
-        }
-
-        builder.Services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(x =>
-            ConfigureJsonSerializer(x.SerializerOptions)
-        );
-
-        // The Swagger UI only respects the Mvc JsonOptions, so set both even though we only need the Http.Json one for minimal APIs
-        builder.Services.Configure<Microsoft.AspNetCore.Mvc.JsonOptions>(x =>
-            ConfigureJsonSerializer(x.JsonSerializerOptions)
-        );
-
         var app = builder.Build();
+        var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Pitwall");
 
-        if (options.ApiEnabled)
-        {
-            app.MapOpenApi();
-
-            app.UseSwaggerUI(opts => opts.SwaggerEndpoint("/openapi/v1.json", "v1"));
-
-            app.MapControlEndpoints().MapTimingEndpoints();
-        }
-
-        app.Logger.LogInformation(
+        logger.LogInformation(
             "{Options}",
             options with
             {
@@ -98,47 +58,22 @@ public static partial class CommandHandler
                 switch (level)
                 {
                     case Whisper.net.Logger.WhisperLogLevel.Error:
-                        app.Logger.LogError("Whisper: {Message}", msg?.Trim('\n'));
+                        logger.LogError("Whisper: {Message}", msg?.Trim('\n'));
                         break;
                     case Whisper.net.Logger.WhisperLogLevel.Warning:
-                        app.Logger.LogDebug("Whisper: {Message}", msg?.Trim('\n'));
+                        logger.LogDebug("Whisper: {Message}", msg?.Trim('\n'));
                         break;
                     case Whisper.net.Logger.WhisperLogLevel.Debug:
-                        app.Logger.LogDebug("Whisper: {Message}", msg?.Trim('\n'));
+                        logger.LogDebug("Whisper: {Message}", msg?.Trim('\n'));
                         break;
                     default:
-                        app.Logger.LogDebug("Whisper {Level}: {Message}", level, msg?.Trim('\n'));
+                        logger.LogDebug("Whisper {Level}: {Message}", level, msg?.Trim('\n'));
                         break;
                 }
             }
         );
 
-        await EnsureConfigFileExistsAsync(app.Logger);
+        await EnsureConfigFileExistsAsync(logger);
         await app.RunAsync();
-    }
-
-    private static string? CreateSchemaReferenceId(JsonTypeInfo typeInfo)
-    {
-        var name = typeInfo.Type.FullName;
-
-        // Don't create references for simple types like bools
-        return name is null || name.StartsWith("System")
-            ? null
-            : name.Replace("Pitwall.Data.", string.Empty)
-                .Replace("Pitwall.Console.Api.", string.Empty)
-                .Replace("+", string.Empty);
-    }
-
-    private static void ConfigureJsonSerializer(JsonSerializerOptions options)
-    {
-        foreach (var converter in TimingDataSerializerContext.Pretty.Options.Converters)
-        {
-            options.Converters.Add(converter);
-        }
-        options.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-        options.TypeInfoResolver = JsonTypeInfoResolver.Combine(
-            ConsoleSerializerContext.Pretty,
-            TimingDataSerializerContext.Pretty
-        );
     }
 }

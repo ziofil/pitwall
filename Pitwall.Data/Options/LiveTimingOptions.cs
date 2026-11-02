@@ -22,12 +22,6 @@ public record LiveTimingOptions
     public string LogDirectory { get; set; } = GetDefaultLogDirectory();
 
     /// <summary>
-    /// Whether the app should expose an API at http://localhost:61937.
-    /// Defaults to <c>false</c>.
-    /// </summary>
-    public bool ApiEnabled { get; set; } = false;
-
-    /// <summary>
     /// Whether verbose logging should be enabled.
     /// Defaults to <c>false</c>.
     /// </summary>
