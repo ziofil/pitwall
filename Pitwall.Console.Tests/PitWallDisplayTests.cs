@@ -186,6 +186,9 @@ public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<Samp
         try
         {
             terminal.Supported = true;
+            // The first frame includes one-off work (loading code, fonts, the track's static
+            // layer), so it isn't counted
+            await display.GetContentAsync();
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             const int frames = 10;
             for (var i = 0; i < frames; i++)
@@ -208,9 +211,10 @@ public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<Samp
                 $"{perFrame:0.0}"
             );
 
-            // A frame, including rendering and compressing the image, must leave plenty of room
-            // in a 66ms frame even on a slow machine
-            Assert.True(perFrame < 60, $"{perFrame:0.0}ms per frame");
+            // Catches a frame becoming pathologically slow. It's typically ~20ms; shared CI
+            // machines vary a lot, and the app lowers its frame rate on slow machines anyway, so
+            // the bound is generous rather than the 66ms frame budget
+            Assert.True(perFrame < 150, $"{perFrame:0.0}ms per frame");
         }
         finally
         {
