@@ -73,6 +73,22 @@ public sealed class MainMenu(
                 );
                 items.Add(
                     new(
+                        "Demo: 2026 Mexico City Grand Prix",
+                        "Try Pitwall on a real race: Mexico City 2026 from lap 28, with a safety car and a red flag. Built in, nothing to download.",
+                        async () =>
+                        {
+                            state.SessionStarted = true;
+                            _ = jsonTimingClient.LoadSimulationDataAsync(DemoSession.Unpack());
+                            await Go(
+                                state.SelectedTeam is null
+                                    ? Screen.SelectTeam
+                                    : Screen.PitWallTiming
+                            );
+                        }
+                    )
+                );
+                items.Add(
+                    new(
                         "Replay a session",
                         "Play back a recorded or imported session. Download old ones with: pitwall import",
                         async () =>

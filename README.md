@@ -95,13 +95,9 @@ Start `pitwall` and use the menu with the arrow keys and <kbd>Enter</kbd>. One s
 2. Pick the team to follow.
 3. Move between the pages with <kbd>◄</kbd>/<kbd>►</kbd> or <kbd>1</kbd>–<kbd>5</kbd>.
 
-To try it straight away without a live session, replay one of the sessions recorded in this repository:
+To try it straight away, choose **Demo: 2026 Mexico City Grand Prix**. The race is built into Pitwall, from lap 28 to the finish with a safety car and a red flag, so there's nothing to download and no account needed.
 
-```sh
-./pitwall --data-directory "/path/to/pitwall/Sample Data"
-```
-
-Choose **Replay a session**, then **Mexico City** and the Race: the 2026 Mexico City Grand Prix from lap 28 to the finish, with a safety car and a red flag. Older sessions from 2024 are there too. A replay starts from the beginning of the recording: press <kbd>⇧ Shift</kbd>+<kbd>N</kbd> a few times to jump ahead.
+More recorded sessions, from 2024, are in this repository's `Sample Data` folder. Start Pitwall with `--data-directory "/path/to/pitwall/Sample Data"` and choose **Replay a session** to play them.
 
 ## Keys
 
