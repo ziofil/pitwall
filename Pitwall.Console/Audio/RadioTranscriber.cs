@@ -31,6 +31,20 @@ public sealed class RadioTranscriber(
     public bool ModelAvailable => transcriptionProvider.IsModelDownloaded;
 
     /// <summary>
+    /// Whether every one of the team's messages has been transcribed (or couldn't be), so there
+    /// is nothing left to do until new messages arrive.
+    /// </summary>
+    public bool Finished
+    {
+        get
+        {
+            lock (_lock)
+                return (_worker is null or { IsCompleted: true })
+                    && (Problem is not null || NextCapture() is null);
+        }
+    }
+
+    /// <summary>
     /// Starts transcribing any of the team's messages that don't have a transcription yet.
     /// Cheap to call often: does nothing while already working or when there's nothing to do.
     /// </summary>

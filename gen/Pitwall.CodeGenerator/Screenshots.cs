@@ -23,6 +23,7 @@ public sealed class Screenshots
     private const int Columns = 160;
     private const int Rows = 45;
     private const float FontSize = 26;
+    private const string ModelFile = "ggml-large-v3-turbo-q5.bin";
 
     private static readonly SKColor DefaultForeground = SKColor.Parse("dddddd");
     private static readonly SKColor DefaultBackground = SKColor.Parse("0b0b0e");
@@ -55,16 +56,20 @@ public sealed class Screenshots
         var cellHeight = (int)Math.Ceiling(FontSize * 1.3f);
         var images = new CapturingImages(cellWidth, cellHeight);
 
-        // An empty data directory, so no transcription model is found and nothing is downloaded
+        // A fresh data directory, with the transcription model from Pitwall's own data directory
+        // linked in if it has been downloaded, so the Comms page can show transcribed radio
+        var dataDirectory = Path.Join(Path.GetTempPath(), $"pitwall-shots-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Join(dataDirectory, "models"));
+        var model = Path.Join(new ConsoleOptions().DataDirectory, "models", ModelFile);
+        if (File.Exists(model))
+            File.CreateSymbolicLink(Path.Join(dataDirectory, "models", ModelFile), model);
+        else
+            await Terminal.OutLineAsync(
+                $"  No transcription model at {model}: radio won't be transcribed"
+            );
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
-                new Dictionary<string, string?>
-                {
-                    ["DataDirectory"] = Path.Join(
-                        Path.GetTempPath(),
-                        $"pitwall-shots-{Guid.NewGuid():N}"
-                    ),
-                }
+                new Dictionary<string, string?> { ["DataDirectory"] = dataDirectory }
             )
             .Build();
         var services = new ServiceCollection()
@@ -96,6 +101,23 @@ public sealed class Screenshots
         Directory.CreateDirectory(outputDirectory);
         var displays = services.GetServices<IDisplay>().ToList();
         var handlers = services.GetServices<IInputHandler>().ToList();
+
+        // Transcribe the team's radio before drawing the Comms page; it runs on this machine, so
+        // it takes a little while per message
+        var transcriber = services.GetRequiredService<RadioTranscriber>();
+        if (transcriber.ModelAvailable)
+        {
+            await Terminal.OutLineAsync("  Transcribing the team's radio...");
+            var deadline = DateTime.UtcNow.AddMinutes(10);
+            transcriber.Tick();
+            while (!transcriber.Finished && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(500);
+                transcriber.Tick();
+            }
+            if (transcriber.Problem is { } problem)
+                await Terminal.OutLineAsync($"  Transcription problem: {problem}");
+        }
 
         foreach (var (screen, name) in PitWallComponents.Pages)
         {

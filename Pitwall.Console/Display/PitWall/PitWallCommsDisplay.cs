@@ -85,6 +85,9 @@ public sealed partial class PitWallCommsDisplay(
             : new Style(foreground: new Color(200, 200, 210));
     }
 
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex Whitespace();
+
     [GeneratedRegex(@"CARS? (\d+)")]
     private static partial Regex CarNumbersRegex();
 
@@ -188,26 +191,46 @@ public sealed partial class PitWallCommsDisplay(
             ? TimeSpan.Zero
             : TimeSpan.Parse(sessionInfo.Latest.GmtOffset);
 
+        // A table, so long transcriptions wrap under their own column. The selected message is
+        // shown in full, the others cut to about two lines.
+        var list = new Table().NoBorder().NoSafeBorder().HideHeaders().Expand();
+        list.AddColumn(new TableColumn("") { Width = 1, Padding = new Padding(0, 0, 1, 0) });
+        list.AddColumn(new TableColumn("") { Width = 8, Padding = new Padding(0, 0, 1, 0) });
+        list.AddColumn(new TableColumn("") { Width = 3, Padding = new Padding(0, 0, 1, 0) });
+        list.AddColumn(new TableColumn(""));
+
         foreach (var (key, capture) in captures.Take(20))
         {
             var driver = context.Driver(capture.RacingNumber);
             var isSelected = key == selected.Key;
-            var marker = isSelected ? "[black on white]►[/]" : " ";
-            var transcription = capture.Transcription?.ReplaceLineEndings(" ");
-            if (!isSelected && transcription?.Length > 60)
-                transcription = transcription[..60] + "…";
-            var preview =
-                transcription is not null ? Markup.Escape(transcription)
-                : transcriber.Current == key ? "[olive]transcribing…[/]"
-                : transcriber.ModelAvailable && transcriber.Problem is null
-                    ? "[grey]waiting to transcribe[/]"
-                : "[grey]Enter to play[/]";
-            rows.Add(
-                new Markup(
-                    $@"{marker} [grey]{capture.Utc?.ToOffset(offset):HH\:mm\:ss}[/] [bold {Led}]{driver.Tla}[/] {preview}"
-                )
+            // Whisper leaves extra spaces between sentences; show the text as one clean paragraph
+            var transcription = capture.Transcription is null
+                ? null
+                : Whitespace().Replace(capture.Transcription, " ").Trim();
+            if (!isSelected && transcription?.Length > 110)
+            {
+                // Cut at the last word that fits, or mid-word if there's no space at all
+                var cut = transcription.LastIndexOf(' ', 110);
+                transcription = transcription[..(cut > 0 ? cut : 110)].TrimEnd() + "…";
+            }
+            var text = transcription is not null
+                ? isSelected
+                    ? $"[bold]{Markup.Escape(transcription)}[/]"
+                    : Markup.Escape(transcription)
+                : transcriber.Current == key
+                    ? "[olive]transcribing…[/]"
+                    : transcriber.ModelAvailable && transcriber.Problem is null
+                        ? "[grey]waiting to transcribe[/]"
+                        : "[grey]Enter to play[/]";
+
+            list.AddRow(
+                new Markup(isSelected ? "[black on white]►[/]" : " "),
+                new Markup($@"[grey]{capture.Utc?.ToOffset(offset):HH\:mm\:ss}[/]"),
+                new Markup($"[bold {Led}]{driver.Tla}[/]"),
+                new Markup(text)
             );
         }
+        rows.Add(list);
 
         return new Panel(new Rows(rows))
         {
