@@ -53,7 +53,7 @@ public sealed class DownloadTranscriptionModelInputHandler(
             await transcriptionProvider.EnsureModelDownloaded();
             logger.LogInformation("Transcription model downloaded");
 
-            state.CurrentScreen = Screen.TeamRadio;
+            state.CurrentScreen = Screen.PitWallComms;
         }
         catch (Exception ex)
         {

@@ -16,5 +16,8 @@ public record State
 
     public int CursorOffset { get; set; } = 0;
 
-    public (string? First, string? Second) CompareDrivers { get; set; } = (null, null);
+    /// <summary>
+    /// The team whose pit wall is being shown, as the team name from the driver list.
+    /// </summary>
+    public string? SelectedTeam { get; set; }
 }

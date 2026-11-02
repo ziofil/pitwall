@@ -9,11 +9,11 @@ public class PauseClockInputHandler(IDateTimeProvider dateTimeProvider) : IInput
     public Screen[] ApplicableScreens =>
         [
             Screen.ManageSession,
-            Screen.RaceControl,
-            Screen.DriverTracker,
-            Screen.TimingTower,
-            Screen.TimingHistory,
-            Screen.TyreStints,
+            Screen.PitWallTiming,
+            Screen.PitWallStrategy,
+            Screen.PitWallTelemetry,
+            Screen.PitWallTrackMap,
+            Screen.PitWallComms,
         ];
 
     public ConsoleKey[] Keys => [ConsoleKey.P];

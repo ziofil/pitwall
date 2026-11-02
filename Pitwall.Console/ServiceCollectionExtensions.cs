@@ -12,7 +12,8 @@ public static partial class ServiceCollectionExtensions
     {
         services.AddDisplaysCore();
 
-        services.AddSingleton<CommonDisplayComponents>();
+        services.AddSingleton<PitWallContext>();
+        services.AddSingleton<PitWallComponents>();
         services.AddSingleton<LogDisplayOptions>();
         services.AddSingleton<StartSimulatedSessionOptions>();
 

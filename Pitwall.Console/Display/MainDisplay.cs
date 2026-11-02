@@ -50,10 +50,10 @@ public class MainDisplay(
             To start a live timing session, press [bold]S[/] then [bold]L[/].
             To start a replay a previously recorded/imported session, press [bold]S[/] then [bold]F[/].
 
-            Once a session is started, navigate to the Timing Tower using [bold]T[/]
-            Then use the Arrow Keys [bold]◄[/]/[bold]►[/] to switch between timing pages.
-            Use [bold]N[/]/[bold]M[/]/[bold],[/]/[bold].[/] to adjust the stream delay, and [bold]▲[/]/[bold]▼[/] keys to use the cursor.
-            Press Shift with these keys to adjust by a higher amount.
+            Once the session starts, pick a team to open its [bold]pit wall[/]: timing, strategy, telemetry,
+            track and comms pages focused on that team's two cars. Press [bold]W[/] here to get back to it.
+            Use [bold]1[/]-[bold]5[/] or [bold]◄[/]/[bold]►[/] to switch pages, [bold]Tab[/] for the next team.
+            Use [bold]N[/]/[bold]M[/]/[bold],[/]/[bold].[/] to adjust the stream delay. Press Shift to adjust by a higher amount.
 
             You can download old session data from Formula 1 by running:
             [italic]> pitwall import[/]

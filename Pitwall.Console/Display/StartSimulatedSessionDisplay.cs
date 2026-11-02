@@ -19,6 +19,8 @@ public class StartSimulatedSessionDisplay(
     IOptions<ConsoleOptions> options
 ) : IDisplay
 {
+    private static readonly Style Inverted = new(foreground: Color.Black, background: Color.White);
+
     public Screen Screen => Screen.StartSimulatedSession;
 
     public Task<IRenderable> GetContentAsync()
@@ -55,10 +57,10 @@ public class StartSimulatedSessionDisplay(
             if (i == selected)
             {
                 locationTable.AddRow(
-                    new Text(Date.ToShortDateString() + " ", DisplayUtils.STYLE_INVERT),
+                    new Text(Date.ToShortDateString() + " ", Inverted),
                     new Text(
                         Location.ToFixedWidth(maxLocationLength, padRight: true),
-                        DisplayUtils.STYLE_INVERT
+                        Inverted
                     )
                 );
             }
@@ -100,13 +102,13 @@ public class StartSimulatedSessionDisplay(
                             sessions
                                 .ElementAt(i)
                                 .Session.ToFixedWidth(maxSessionTypeLength + 1, padRight: true),
-                            DisplayUtils.STYLE_INVERT
+                            Inverted
                         ),
                         new Text(
                             sessions
                                 .ElementAt(i)
                                 .Directory.ToFixedWidth(directoryAvailableWidth, padRight: true),
-                            DisplayUtils.STYLE_INVERT
+                            Inverted
                         )
                     );
                 }

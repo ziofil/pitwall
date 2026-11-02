@@ -42,7 +42,7 @@
     },
     "enablePositionSmoothing": {
       "type": "boolean",
-      "description": "Whether car positions on the driver tracker glide between updates by fitting a line to\nrecent samples, rather than jumping to each raw sample as it arrives. The smoothed dot\nlags live slightly so it can be fitted from the samples around it.\nDefaults to \u003Csee langword=\u0022true\u0022 /\u003E."
+      "description": "Whether car positions on the track page glide between updates by fitting a line to\nrecent samples, rather than jumping to each raw sample as it arrives. The smoothed dot\nlags live slightly so it can be fitted from the samples around it.\nDefaults to \u003Csee langword=\u0022true\u0022 /\u003E."
     },
     "externalPlayerSync": {
       "description": "Options to configure the external player synchronisation service",

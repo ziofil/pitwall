@@ -4,7 +4,8 @@ public class SwitchToSessionInputHandler(State state) : IInputHandler
 {
     public bool IsEnabled => true;
 
-    public Screen[] ApplicableScreens => [Screen.Main, Screen.TimingTower];
+    public Screen[] ApplicableScreens =>
+        [Screen.Main, Screen.SelectTeam, .. PitWallComponents.Pages.Select(x => x.Screen)];
 
     public ConsoleKey[] Keys => [ConsoleKey.S];
 

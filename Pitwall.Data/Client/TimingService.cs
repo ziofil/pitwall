@@ -131,7 +131,7 @@ public class TimingService(
         }
     }
 
-    private void ProcessData(string type, string? data, DateTimeOffset timestamp)
+    internal void ProcessData(string type, string? data, DateTimeOffset timestamp)
     {
         if (data is null)
             return;

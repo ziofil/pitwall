@@ -24,6 +24,7 @@ public class StartLiveSessionInputHandler(
     )
     {
         await liveTimingClient.StartAsync();
-        state.CurrentScreen = Screen.TimingTower;
+        // Go straight to the pit wall, asking for a team first if none is chosen yet
+        state.CurrentScreen = state.SelectedTeam is null ? Screen.SelectTeam : Screen.PitWallTiming;
     }
 }

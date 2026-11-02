@@ -39,6 +39,13 @@ public sealed partial record CarDataPoint : ILiveTimingDataPoint
 
                 [JsonPropertyName("5")]
                 public int? Brake { get; set; }
+
+                /// <summary>
+                /// DRS state. Values of 10, 12 and 14 mean the flap is open,
+                /// 8 means the car is eligible to open it in the next activation zone.
+                /// </summary>
+                [JsonPropertyName("45")]
+                public int? Drs { get; set; }
             }
         }
     }

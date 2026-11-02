@@ -7,27 +7,18 @@ Pitwall is an open source F1 Live Timing client.
 > Pitwall is a fork of [undercut-f1](https://github.com/JustAman62/undercut-f1) by Aman Dhoot, modified by Filippo Miatto.
 > It is distributed under the same [GPL-3.0 license](LICENSE). See [Notice](#notice) for details.
 
-`pitwall` is a TUI application which uses `Pitwall.Data` to show a Live Timing screen during sessions, and records the data for future session replays.
+`pitwall` is a TUI application that shows a team's pit wall during F1 sessions: pick a team and follow its two cars on pages modelled on what engineers and strategists look at. It uses `Pitwall.Data` for the live timing feed, and records the data for future session replays.
 F1 live broadcasts are usually delayed by some indeterminable amount (usually 30-60 seconds), so the TUI allows you to delay the data being displayed so that you can match up what you see on your screen to what you see on your TV.
 
 The `Pitwall.Data` library is provided to facilitate connectivity with the F1 Live Timing data stream, and handle all the processing of the incoming data. It also allows for "simulated" streams, where previously recorded data streams can be played back to allow for easy development/testing.
 
 Feature Highlights:
 
-![Timing Tower during a Race](docs/screenshots/race-timing-screen.png)
-
-- [Timing Tower](#timing-tower-during-a-race) showing for each driver:
-  - Live sector times, with colouring for personal/overall fastest
-  - Last & Best Lap
-  - Current tyre
-  - Age of current tyre
-  - Interval to driver in front
-  - Gap to leader
-  - Gap [between a selected driver](#using-a-cursor-to-display-relative-gap-for-a-specific-driver) and all other drivers (useful for monitoring pit windows)
-- [Pit Stop Strategy](#tyre-stint--strategy) gives you at-a-glance information about all the drivers strategies
-- [Race Control](#race-control-page) messages including investigations, penalties, lap deletions, and weather
-- [Driver Tracker](#driver-tracker) shows the position of selected drivers on a live track map
-- Lap-by-lap [Timing History](#using-a-cursor-to-view-timing-history-by-lap) to observe gaps over time
+- An official-style [timing monitor](#the-pit-wall) with the team's cars marked
+- A [strategy page](#the-pit-wall) with a race trace, pace and tyre degradation, gap trends, a pit-now rejoin prediction and undercut range
+- Waveform [telemetry](#the-pit-wall) traces for both cars, current lap against the previous one
+- A lap ring and circuit map where cars glide smoothly between feed updates
+- Race control messages and the team's radio, with playback and transcription
 - [Pause the session clock](#external-session-clock-sync) when you pause external video players (such as Kodi), so that your timing screen remains in sync with your feed.
 
 > [!WARNING]
@@ -35,9 +26,8 @@ Feature Highlights:
 >
 > The following functionality is now only available to those who have an active F1 TV subscription:
 >
-> - Driver Tracker (live position of each car is unavailable)
-> - DRS Indicator in Timing Screens
-> - Team/Drivers championship tables
+> - Car positions on the track page
+> - Car telemetry (speed, throttle, brake, gear, RPM, DRS)
 > - Pit Stop times (in box and in pitlane)
 >
 > Importing a session after it finishes still fetches all the data, so all functionality is available if you use pitwall after a race finishes.
@@ -48,16 +38,7 @@ Feature Highlights:
 ## Table of Contents
 
 - [Inspiration](#inspiration)
-- [Pitwall in Action](#pitwall-in-action)
-  - [Timing Tower during a Race](#timing-tower-during-a-race)
-  - [Using a Cursor to Display Relative Gap for a Specific Driver](#using-a-cursor-to-display-relative-gap-for-a-specific-driver)
-  - [Track Gaps between Two Drivers Over Time](#track-gaps-between-two-drivers-over-time)
-  - [Timing Tower during Practice/Qualifying](#timing-tower-during-practicequalifying)
-  - [Race Control Page](#race-control-page)
-  - [Driver Tracker](#driver-tracker)
-  - [Tyre Stint / Strategy](#tyre-stint--strategy)
-  - [Using a Cursor to View Timing History by Lap](#using-a-cursor-to-view-timing-history-by-lap)
-  - [Listen to and Transcribe Team Radio](#listen-to-and-transcribe-team-radio)
+- [The Pit Wall](#the-pit-wall)
 - [Getting Started with `pitwall`](#getting-started-with-pitwall)
   - [Installation](#installation)
     - [Prerequisites](#prerequisites)
@@ -88,92 +69,21 @@ Feature Highlights:
 
 This project is heavily inspired by the [FastF1 project by theOehrly](https://github.com/theOehrly/Fast-F1). They did a lot of the work understanding the SignalR stream coming from the F1 Live Timing service. Visit their project if you'd like to do any sort of data analysis on past F1 events, or gather live timing data using their module.
 
-## Pitwall in Action
+## The Pit Wall
 
-### Timing Tower during a Race
+Start a session, then pick a team. Five pages follow the layout and colour conventions of what teams look at on the pit wall, built from the public live timing feed. Everything centres on the selected team's two cars, which are marked in the team colour.
 
-Monitor sector times and gaps, see recent race control messages, capture position changes, observe pit strategies, and more with the standard Timing Tower view.
+| Key | Page | What it shows |
+| --- | --- | --- |
+| `1` | Timing | A copy of the official timing monitor: cyan positions and headers, purple/green/yellow sector times, session-best sectors above the sector columns, and the clocks in yellow along the bottom. |
+| `2` | Strategy | A race trace (each car's time against a reference pace, so pace, stops and gaps read at a glance), and per car: tyre and stint, pace and degradation, the gaps ahead and behind with their trend, where it would rejoin if it pitted now, and rivals in undercut range. |
+| `3` | Telemetry | Waveform traces against lap distance (speed, throttle, brake, gear, RPM, DRS), with the current lap over the previous one and a legend of live values. |
+| `4` | Track | A lap ring showing where every car is around the lap, with the latest race control messages inside, next to the circuit map. |
+| `5` | Comms | Race control messages coloured by type, with those about the team marked, alongside the team's radio. `Enter` plays and `T` transcribes. |
 
-![Timing Tower during a Race](docs/screenshots/race-timing-screen.png)
+Use `◄`/`►` or `1`–`5` to move between pages, `Tab` to switch to the next team, and `G` to pick a team from the list. Press `W` on the main screen to get back to the pit wall.
 
-### Using a Cursor to Display Relative Gap for a Specific Driver
-
-Use the cursor controlled by the <kbd>▼</kbd>/<kbd>▲</kbd> `Cursor` actions in the <kbd>O</kbd> `Timing Tower` screen to select a specific driver (in this case Norris) to see the relative interval between that driver and all other. This is useful for determining where a driver will fall to after a pit stop, or looking at pit windows during under cuts.
-
-Additionally, the gap between the selected drivers and those around them over the last four laps will be displayed at the bottom of the screen. This allows you to easily see evolving gaps over time and evaluate how soon a driver may catch up or pull away.
-
-![Relative gaps for a specific driver](docs/screenshots/relative-gap-race.png)
-
-### Track Gaps between Two Drivers Over Time
-
-Similar to the above comparison feature, you can also select two drivers to enter a persistent comparison mode, by using the <kbd>C</kbd> `Select for Compare` action when your cursor is over a particular driver. Selecting two drivers in this way will replace the normal comparison panel with a persistent comparison between the two selected drivers.
-
-This allows you to easily monitor the gaps between two drivers who are not next to eachother on track, for example if they are on contra tyre strategies or to monitor a driver pit window against another driver.
-
-Once you select the two driver to compare, move your cursor back to the top (position 0) to have the Compare column show relative gaps to the first selected driver.
-
-![Two driver selected for compare](docs/screenshots/compare-drivers.png)
-
-### Timing Tower during Practice/Qualifying
-
-Monitor live/best sector times, gaps, tyres, and lap deletions easily with the specialized timing tower for non-race sessions.
-
-![Timing Tower during Practice/Qualifying](docs/screenshots/quali-timing-screen.png)
-
-### Race Control Page
-
-The `Race Control` page shows all Race Control Messages for the session, along with other session data such as the Weather.
-
-![Race Control Page](docs/screenshots/race-control-screen.png)
-
-### Driver Tracker
-
-The `Driver Tracker` page shows a track map overlaid with selected drivers. Use the <kbd>▼</kbd>/<kbd>▲</kbd> `Cursor` actions to choose drivers, then use the <kbd>⏎</kbd> `Toggle Select` action to toggle the inclusion of the driver on the track map. The driver under the current cursor position will also be highlighted on the map, and timing gaps will switch to interval between that driver and all other drivers.
-
-![Driver Tracker Page](docs/screenshots/driver-tracker.png)
-
-> [!NOTE]
-> The Driver Tracker and Timing History charts work using terminal graphics protocols. Pitwall supports three protocols:
->
-> - [Kitty Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/)
-> - [iTerm2 Inline Image Protocol](https://iterm2.com/documentation-images.html)
-> - [Sixel](https://www.vt100.net/docs/vt3xx-gp/chapter14.html)
->
-> Between these three protocols, Pitwall should support a wide variety of terminals.
-> I personally try to test on iTerm2, Ghostty, WezTerm, and Kitty.
-> Windows Terminal should be supported via Sixel, but is rarely tested.
->
-> Run `pitwall info` to see if Pitwall detects graphics protocol support in your terminal.
->
-> If the terminal you use doesn't show the graphics, please raise an issue and I'll try to implement support!
-
-### Tyre Stint / Strategy
-
-The `Tyre Stint` page shows the tyre strategy for all the drivers. At a glance, see what tyres the drivers have used, how old they are, and if they are on an offset strategy to any other drivers. Each stint contains the pit stop time and pit lane time for the pit stop at the start of the stint.
-
-Use the <kbd>▼</kbd>/<kbd>▲</kbd> `Cursor` actions to view more information for a particular drivers strategy.
-
-![Tyre Stint](docs/screenshots//tyre-stint-screen.png)
-
-### Using a Cursor to View Timing History by Lap
-
-In the `Timing by Lap` page, you can use the cursor controlled by the <kbd>▼</kbd>/<kbd>▲</kbd> `Cursor` actions to view historical snapshots of the timing tower at the end of every lap. This view will show position changes during that lap, and relative changes in Gap and Interval. Scrolling through laps allows you to build a picture of how the race is unfolding.
-
-Charts on the right display how Gap to Leader and Lap Time for all selected drivers over the last 15 laps, letting you see trends and catch strategies unfolding.
-
-A Delta to Average Lap chart on the bottom shows each drivers relative gap to the average lap time on each lap. This gives a slightly cleaner understanding of the pace of each car on each lap, accounting for overall race pace changes where the entire field slows down for e.g. a safety car of changing conditions. Big spikes are usually pit laps which make it easy to see how a drivers strategy is playing out.
-
-You can show/hide drivers here by using the <kbd>D</kbd> `Select Drivers` action and then hitting enter on the drivers you have to show/hide. The drivers hidden here will also be hidden on the Driver Tracker page. 
-
-![Using a Cursor to View Timing History by Lap](docs/screenshots/timing-history-screen.png)
-
-### Listen to and Transcribe Team Radio
-
-Listen to team radio clips from anytime in the session, and use a local ML model (Whisper) to transcribe the audio on demand. Transcription accuracy is fairly low, depending on the that days audio quality and driver. Suggestions welcome for improving this!
-
-See [Prerequisites](#prerequisites) to ensure you are able to playback audio.
-
-![Listen to and Transcribe Team Radio](docs/screenshots/team-radio.png)
+The data comes from the public feed only, so the pages show what can be derived from it. Teams' own car telemetry (tyre temperatures, energy, fuel and so on) isn't available. The pit loss is estimated from stops already made in the session, comparing in- and out-laps with the cars that didn't stop on the same laps. Telemetry and car positions need an [F1 TV account](#f1-tv-account-login) during live sessions.
 
 ## Getting Started with `pitwall`
 
@@ -313,7 +223,7 @@ Data processing, and therefore the "session clock" can be paused using the <kbd>
 
 #### Using the Cursor
 
-There is a global cursor that is controlled with the <kbd>▼</kbd>/<kbd>▲</kbd> `Cursor` actions. What this cursor does depends on the screen, for example is can be used in the Timing Tower screen to scroll through Race Control Messages, or to select a driver on the Tower to see comparative intervals. Hold the <kbd>⇧ Shift</kbd> key to move the cursor by five positions instead of one.
+There is a global cursor that is controlled with the <kbd>▼</kbd>/<kbd>▲</kbd> `Cursor` actions. What this cursor does depends on the screen, for example it picks a team on the team list, or a radio message on the Comms page. Hold the <kbd>⇧ Shift</kbd> key to move the cursor by five positions instead of one.
 
 ## Configuration
 
@@ -333,7 +243,7 @@ To view what configuration is currently being used, open the <kbd>I</kbd> `Info`
 | `preferFfmpegPlayback`                        | `--prefer-ffmpeg`           | `PITWALL_PREFERFFMPEGPLAYBACK`                         | Prefer the usage of `ffplay` for playing Team Radio on Mac/Linux, instead of afplay/mpg123 respectively. `ffplay` is always used on Windows. Default: `false`. Values: `true` or `false`.                                               |
 | `forceGraphicsProtocol`                       | `--force-graphics-protocol` | `PITWALL_FORCEGRAPHICSPROTOCOL`                        | Forces the usage of a particular graphics protocol instead of using heuristics to find a supported one. Values: `Kitty`, `Sixel`, or `iTerm`.                                                                                           |
 | `preventDisplaySleep`                         | `--prevent-sleep`           | `PITWALL_PREVENTDISPLAYSLEEP`                          | If enabled, will attempt to prevent the device/display from sleeping whilst the app is running. Intended to help prevent accidental stream disconnection due to inactivity on your device. Default: `false`. Values: `true` or `false`. |
-| `enablePositionSmoothing`                     | N/A                         | `PITWALL_ENABLEPOSITIONSMOOTHING`                      | Whether car positions on the driver tracker glide between updates by fitting recent samples (the dot lags live slightly), rather than jumping to each raw sample. Default: `false`. Values: `true` or `false`.                          |
+| `enablePositionSmoothing`                     | N/A                         | `PITWALL_ENABLEPOSITIONSMOOTHING`                      | Whether car positions on the track page glide between updates by fitting recent samples (the dot lags live slightly), rather than jumping to each raw sample. Default: `true`.  Values: `true` or `false`.                          |
 | `formula1AccessToken`                         | N/A                         | `PITWALL_FORMULA1ACCESSTOKEN`                          | The access token to use when connecting to the F1 Live Timing feed. Only required to see additional data feeds.                                                                                                                         |
 | `externalPlayerSync.enabled`                  | N/A                         | `PITWALL_EXTERNALPLAYERSYNC__ENABLED`                  | Whether synchronisation of the session clock is enabled. Default: `false`. Values: `true` or `false`.                                                                                                                                   |
 | `externalPlayerSync.url`                      | N/A                         | `PITWALL_EXTERNALPLAYERSYNC__URL`                      | The URL to use when connecting to the external services websocket. For Kodi, this will be something like `ws://localhost:9090/jsonrpc`.                                                                                                 |
@@ -359,9 +269,8 @@ Since the 2025 Dutch GP, the F1 Live Timing feed no longer freely publishes some
 
 The following functionality is now only available to those who have an active F1 TV subscription:
 
-- Driver Tracker (live position of each car is unavailable)
-- DRS Indicator in Timing Screens
-- Team/Drivers championship tables
+- Car positions on the track page
+- Car telemetry (speed, throttle, brake, gear, RPM, DRS)
 - Pit Stop times (in box and in pitlane)
 
 Importing a session after it finishes still fetches all the data, so all functionality is available if you use pitwall after a race finishes.

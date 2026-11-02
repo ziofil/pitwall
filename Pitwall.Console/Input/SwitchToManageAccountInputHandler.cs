@@ -10,7 +10,7 @@ public class SwitchToManageAccount(State state, Formula1Account accountService) 
         accountService.IsAuthenticated == Formula1Account.AuthenticationResult.Success
             ? [Screen.Main]
             // If not currently logged in, how the input on screens where data may be missing
-            : [Screen.Main, Screen.DriverTracker, Screen.ChampionshipStats];
+            : [Screen.Main, Screen.PitWallTelemetry, Screen.PitWallTrackMap];
 
     public ConsoleKey[] Keys => [ConsoleKey.A];
 

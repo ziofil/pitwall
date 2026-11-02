@@ -20,8 +20,6 @@
     <PackageReference Include="HarfBuzzSharp.NativeAssets.Linux" />
     <PackageReference Include="InhibitSleep.Net" />
     <PackageReference Include="InMemoryLogger" />
-    <PackageReference Include="LiveChartsCore" />
-    <PackageReference Include="LiveChartsCore.SkiaSharpView" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Serilog" />
     <PackageReference Include="Serilog.AspNetCore" />
@@ -34,7 +32,6 @@
     <PackageReference Include="Spectre.Console" />
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" />
     <PackageReference Include="System.CommandLine" />
-    <PackageReference Include="TextCopy" />
     <PackageReference Include="Vezel.Cathode" />
     <PackageReference Include="Vezel.Cathode.Extensions" />
   </ItemGroup>

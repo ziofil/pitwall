@@ -162,7 +162,7 @@ public class JsonTimingClient(
         return delay;
     }
 
-    private static (string type, string? data, DateTimeOffset timestamp) ProcessLine(string line)
+    internal static (string type, string? data, DateTimeOffset timestamp) ProcessLine(string line)
     {
         var json = JsonNode.Parse(line);
         // When we used the old ASP.NET SignalR, we received messages in an older format

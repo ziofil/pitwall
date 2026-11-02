@@ -6,12 +6,13 @@ namespace Pitwall.Console;
 public sealed class PlayTeamRadioInputHandler(
     AudioPlayer audioPlayer,
     State state,
-    TeamRadioProcessor teamRadio
+    TeamRadioProcessor teamRadio,
+    PitWallContext pitWallContext
 ) : IInputHandler
 {
     public bool IsEnabled => true;
 
-    public Screen[] ApplicableScreens => [Screen.TeamRadio];
+    public Screen[] ApplicableScreens => [Screen.PitWallComms];
 
     public ConsoleKey[] Keys => [ConsoleKey.Enter];
 
@@ -39,7 +40,10 @@ public sealed class PlayTeamRadioInputHandler(
 
     private async Task PlayAsync(int offset, CancellationToken cancellationToken = default)
     {
-        var radio = teamRadio.Ordered.ElementAtOrDefault(offset);
+        // The comms page only lists the selected team's radio
+        var radio = PitWallCommsDisplay.TeamCaptures(teamRadio, pitWallContext).ElementAtOrDefault(offset);
+        if (radio.Key is null)
+            return;
         var destFileName = await teamRadio.DownloadTeamRadioToFileAsync(
             radio.Key,
             cancellationToken

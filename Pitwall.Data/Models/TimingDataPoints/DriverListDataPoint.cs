@@ -42,12 +42,5 @@ public sealed partial class DriverListDataPoint
 
         public string? TeamName { get; set; }
         public string? TeamColour { get; set; }
-
-        /// <summary>
-        /// Internal property which identifiers whether this driver is "selected" or not.
-        /// Unselected drivers are hidden in some displays.
-        /// </summary>
-        [MergeableIgnore]
-        public bool IsSelected { get; set; } = true;
     }
 }

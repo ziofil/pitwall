@@ -6,13 +6,14 @@ namespace Pitwall.Console;
 public sealed class TranscribeTeamRadioInputHandler(
     State state,
     TeamRadioProcessor teamRadio,
+    PitWallContext pitWallContext,
     ITranscriptionProvider transcriptionProvider,
     ILogger<TranscribeTeamRadioInputHandler> logger
 ) : IInputHandler
 {
     public bool IsEnabled => true;
 
-    public Screen[] ApplicableScreens => [Screen.TeamRadio];
+    public Screen[] ApplicableScreens => [Screen.PitWallComms];
 
     public ConsoleKey[] Keys => [ConsoleKey.T];
 
@@ -45,15 +46,20 @@ public sealed class TranscribeTeamRadioInputHandler(
                 logger.LogInformation("Asked to start transcribing, but already working");
                 break;
             default:
-                _task = Task.Run(() => TranscribeAsync(state.CursorOffset), cancellationToken);
+                // Resolve the selection now, the list can change while transcribing
+                var radio = PitWallCommsDisplay
+                    .TeamCaptures(teamRadio, pitWallContext)
+                    .ElementAtOrDefault(state.CursorOffset);
+                if (radio.Key is null)
+                    break;
+                _task = Task.Run(() => TranscribeAsync(radio), cancellationToken);
                 break;
         }
         return Task.CompletedTask;
     }
 
-    private async Task TranscribeAsync(int offset)
+    private async Task TranscribeAsync(KeyValuePair<string, TeamRadioDataPoint.Capture> radio)
     {
-        var radio = teamRadio.Ordered.ElementAtOrDefault(offset);
         try
         {
             await teamRadio.TranscribeAsync(radio.Key);

@@ -1,0 +1,142 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Pitwall.Data;
+using Spectre.Console;
+using Spectre.Console.Rendering;
+
+namespace Pitwall.Console.Tests;
+
+/// <summary>
+/// Replays the recorded 2024 Silverstone race from the repository's sample data up to lap 30.
+/// </summary>
+public sealed class SampleRaceFixture() : SampleSessionFixture("2024_Silverstone_Race", ReplayToLap)
+{
+    public const int ReplayToLap = 30;
+}
+
+/// <summary>Replays the whole recorded 2024 Imola qualifying session.</summary>
+public sealed class SampleQualifyingFixture() : SampleSessionFixture("2024_Imola_Qualifying", int.MaxValue);
+
+/// <summary>
+/// Replays a recorded session from the repository's sample data up to a set lap, so displays can
+/// be rendered against real timing data.
+/// </summary>
+public abstract class SampleSessionFixture
+{
+    public IServiceProvider Services { get; }
+
+    /// <summary>Whether the circuit outline could be downloaded for the track page.</summary>
+    public bool HasCircuitMap { get; }
+
+    protected SampleSessionFixture(string session, int replayToLap)
+    {
+        var configuration = new ConfigurationBuilder().Build();
+        var services = new ServiceCollection()
+            .AddSingleton<ILoggerFactory, NullLoggerFactory>()
+            .AddSingleton(typeof(ILogger<>), typeof(NullLogger<>))
+            .AddLiveTiming(configuration)
+            .AddSingleton<State>()
+            .AddSingleton<PitWallContext>()
+            .AddSingleton<PitWallComponents>()
+            .Configure<ConsoleOptions>(_ => { })
+            .AddSingleton<SelectTeamDisplay>()
+            .AddSingleton<PitWallTimingDisplay>()
+            .AddSingleton<PitWallStrategyDisplay>()
+            .AddSingleton<PitWallTelemetryDisplay>()
+            .AddSingleton<PitWallTrackMapDisplay>()
+            .AddSingleton<PitWallCommsDisplay>();
+        Services = services.BuildServiceProvider();
+
+        var directory = FindSampleDirectory(session);
+        var timingService = (TimingService)Services.GetRequiredService<ITimingService>();
+        timingService.ProcessSubscriptionData(
+            File.ReadAllText(Path.Join(directory, "subscribe.txt"))
+        );
+
+        var lapCount = Services.GetRequiredService<LapCountProcessor>();
+        var clock = Services.GetRequiredService<IDateTimeProvider>();
+        var last = DateTimeOffset.MinValue;
+        foreach (var line in File.ReadLines(Path.Join(directory, "live.txt")))
+        {
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+            var (type, data, timestamp) = JsonTimingClient.ProcessLine(line);
+            // Keep the session clock at the message's time, as it is when the app replays it
+            clock.Delay = DateTimeOffset.UtcNow - timestamp;
+            timingService.ProcessData(type, data, timestamp);
+            last = timestamp;
+            if (lapCount.Latest.CurrentLap > replayToLap)
+                break;
+        }
+
+        // The circuit outline is downloaded in the background; give it a moment to arrive.
+        // Without network access the track page shows its "no circuit map" message instead.
+        var sessionInfo = Services.GetRequiredService<SessionInfoProcessor>();
+        for (var i = 0; i < 50 && sessionInfo.Latest.CircuitPoints.Count == 0; i++)
+            Thread.Sleep(100);
+        HasCircuitMap = sessionInfo.Latest.CircuitPoints.Count > 0;
+
+        // Make the session clock read as the time of the last replayed message
+        Services.GetRequiredService<IDateTimeProvider>().Delay = DateTimeOffset.UtcNow - last;
+    }
+
+    /// <summary>
+    /// Renders a display to plain text at the given terminal size. Also writes the text and a
+    /// coloured HTML version to a <c>renders</c> folder next to the test assembly (or to
+    /// <c>PITWALL_RENDER_DIR</c> if set), for looking at the result.
+    /// </summary>
+    public async Task<string> RenderAsync(IDisplay display, int width = 160, int height = 45)
+    {
+        var content = await display.GetContentAsync();
+        var console = AnsiConsole.Create(
+            new AnsiConsoleSettings
+            {
+                Ansi = AnsiSupport.Yes,
+                ColorSystem = ColorSystemSupport.TrueColor,
+                Out = new AnsiConsoleOutput(new StringWriter()),
+                Interactive = InteractionSupport.No,
+            }
+        );
+        console.Profile.Width = width;
+        console.Profile.Height = height;
+        var recorder = new Recorder(console);
+        recorder.Write(content);
+        var text = recorder.ExportText();
+
+        var outputDirectory = Environment.GetEnvironmentVariable("PITWALL_RENDER_DIR");
+        if (string.IsNullOrWhiteSpace(outputDirectory))
+            outputDirectory = Path.Join(AppContext.BaseDirectory, "renders");
+        {
+            Directory.CreateDirectory(outputDirectory);
+            var name = $"{GetType().Name}-{display.Screen}-{width}x{height}";
+            await File.WriteAllTextAsync(Path.Join(outputDirectory, $"{name}.txt"), text);
+            var html = recorder
+                .ExportHtml()
+                .Replace(
+                    "<pre",
+                    "<pre style=\"background:#000;color:#ddd;font-family:Menlo,monospace;font-size:13px;line-height:1.2;margin:0;padding:8px\""
+                );
+            await File.WriteAllTextAsync(
+                Path.Join(outputDirectory, $"{name}.html"),
+                $"<html><body style='margin:0;background:#000'>{html}</body></html>"
+            );
+        }
+
+        return text;
+    }
+
+    private static string FindSampleDirectory(string name)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Join(directory.FullName, "Sample Data", name);
+            if (Directory.Exists(candidate))
+                return candidate;
+            directory = directory.Parent;
+        }
+        throw new DirectoryNotFoundException($"Couldn't find Sample Data/{name}");
+    }
+}
