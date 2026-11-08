@@ -22,20 +22,32 @@ public readonly record struct TelemetrySample(
 /// The telemetry recorded for one lap of one car.
 /// </summary>
 /// <param name="Lap">The lap number being driven (1 is the first lap of the session).</param>
-public sealed record TelemetryLap(int Lap, IReadOnlyList<TelemetrySample> Samples)
+/// <param name="Duration">
+/// For a completed lap, the time from its start to the next lap's: its lap time, near enough
+/// (the timing updates that mark both ends trail the line by about the same).
+/// </param>
+public sealed record TelemetryLap(
+    int Lap,
+    IReadOnlyList<TelemetrySample> Samples,
+    TimeSpan? Duration = null
+)
 {
     public double Distance => Samples.Count == 0 ? 0 : Samples[^1].Distance;
 }
 
 /// <summary>
 /// Keeps a short per-lap history of car telemetry (speed, RPM, gear, throttle, brake, DRS),
-/// so that traces can be drawn against lap distance and compared lap-on-lap.
-/// <see cref="CarDataProcessor"/> only keeps the newest sample, which is enough for live readouts
-/// but not for traces. Distance isn't in the feed, so it's integrated from speed.
+/// so that traces can be drawn against lap distance and compared lap-on-lap, and each car's
+/// best lap for the live delta to it. <see cref="CarDataProcessor"/> only keeps the newest
+/// sample, which is enough for live readouts but not for traces. Distance isn't in the feed, so
+/// it's integrated from speed. Samples are split into laps by their own time against when the
+/// timing feed counted each lap (<see cref="LapCrossingProcessor"/>), as telemetry arrives a
+/// second or two after the timing for the same moment.
 /// </summary>
 public sealed class CarTelemetryHistoryProcessor(
     TimingDataProcessor timingData,
-    IDateTimeProvider dateTimeProvider
+    IDateTimeProvider dateTimeProvider,
+    LapCrossingProcessor? crossings = null
 ) : IProcessor<CarDataPoint>
 {
     /// <summary>How many completed laps are kept per driver, in addition to the current lap.</summary>
@@ -127,6 +139,7 @@ public sealed class CarTelemetryHistoryProcessor(
 
         sample = step with
         {
+            Elapsed = TimeSpan.FromSeconds(Math.Max(0, Fit(x => x.Elapsed.TotalSeconds))),
             Speed = (int)Math.Round(Fit(x => x.Speed)),
             Rpm = (int)Math.Round(Fit(x => x.Rpm)),
             Throttle = (int)Math.Clamp(Math.Round(Fit(x => x.Throttle)), 0, 100),
@@ -162,6 +175,98 @@ public sealed class CarTelemetryHistoryProcessor(
     }
 
     /// <summary>
+    /// Closes the lap in progress and starts the next at <paramref name="start"/>. Samples of the
+    /// closing lap taken after that moment (they can arrive before the timing update that ends
+    /// the lap) move to the new lap.
+    /// </summary>
+    private void StartLap(string driverNumber, DriverState state, int lap, DateTimeOffset start)
+    {
+        var moved = new List<TelemetrySample>();
+        if (state.Current.Count > 0)
+        {
+            var closing = state.Current.Where(x => state.LapStartUtc + x.Elapsed < start).ToList();
+            var after = state.Current.Skip(closing.Count).ToList();
+            // Where the car was on the closing lap at the crossing, so the moved samples measure
+            // from the line
+            var atLine = after.Count == 0 ? 0 : after[0].Distance;
+            if (closing.Count > 0 && after.Count > 0)
+            {
+                var (a, b) = (closing[^1], after[0]);
+                var (ta, tb) = (state.LapStartUtc + a.Elapsed, state.LapStartUtc + b.Elapsed);
+                var f = tb > ta ? (start - ta) / (tb - ta) : 0;
+                atLine = a.Distance + ((b.Distance - a.Distance) * f);
+            }
+            foreach (var sample in after)
+            {
+                moved.Add(
+                    sample with
+                    {
+                        Distance = Math.Max(0, sample.Distance - atLine),
+                        Elapsed = state.LapStartUtc + sample.Elapsed - start,
+                    }
+                );
+            }
+            if (closing.Count > 0)
+                state.Completed.Add(
+                    new TelemetryLap(state.CurrentLap, [.. closing], start - state.LapStartUtc)
+                );
+            Prune(driverNumber, state);
+
+            // The live values fit through recent samples of one lap, so relabel the moved ones
+            for (var i = 0; i < state.Recent.Count; i++)
+            {
+                var (utc, recentLap, sample) = state.Recent[i];
+                if (recentLap == state.CurrentLap && utc >= start)
+                {
+                    var rebased = moved.FirstOrDefault(x => x.Elapsed == utc - start);
+                    state.Recent[i] = (utc, lap, rebased == default ? sample : rebased);
+                }
+            }
+        }
+        state.Current = moved;
+        state.CurrentLap = lap;
+        state.LapStartUtc = start;
+        state.Distance = moved.Count == 0 ? 0 : moved[^1].Distance;
+    }
+
+    /// <summary>
+    /// Drops the oldest completed laps beyond <see cref="CompletedLapsToKeep"/>, but never the
+    /// car's best lap of the session, which the live delta is measured against.
+    /// </summary>
+    private void Prune(string driverNumber, DriverState state)
+    {
+        var best = BestOf(driverNumber, state.Completed);
+        while (state.Completed.Count(x => x != best) > CompletedLapsToKeep)
+            state.Completed.Remove(state.Completed.First(x => x != best));
+    }
+
+    /// <summary>The telemetry of the car's best lap this session, if it's held.</summary>
+    public TelemetryLap? GetBestLap(string driverNumber)
+    {
+        if (!_drivers.TryGetValue(driverNumber, out var state))
+            return null;
+        lock (state)
+            return BestOf(driverNumber, state.Completed);
+    }
+
+    // A lap whose duration is within this of the official best lap time is that lap
+    private static readonly TimeSpan BestLapMatch = TimeSpan.FromSeconds(0.5);
+
+    /// <summary>
+    /// Which of the laps is the car's official best: the one that took that long. Lap numbers
+    /// can't say, as the feed counts them differently in qualifying (leaving the pits counts as
+    /// a lap there) and in races.
+    /// </summary>
+    private TelemetryLap? BestOf(string driverNumber, List<TelemetryLap> laps)
+    {
+        var best = timingData.Latest.Lines.GetValueOrDefault(driverNumber)?.BestLapTime.ToTimeSpan();
+        return best is null
+            ? null
+            : laps.Where(x => x.Duration is { } d && (d - best.Value).Duration() < BestLapMatch)
+                .MinBy(x => (x.Duration!.Value - best.Value).Duration());
+    }
+
+    /// <summary>
     /// Returns the laps held for the given driver, oldest first. The last entry is the lap in progress.
     /// </summary>
     public IReadOnlyList<TelemetryLap> GetLaps(string driverNumber)
@@ -190,34 +295,37 @@ public sealed class CarTelemetryHistoryProcessor(
         if (utc <= state.LastUtc)
             return;
 
-        // NumberOfLaps is the count of completed laps, so the lap being driven is one more.
-        var lap = (timingData.Latest.Lines.GetValueOrDefault(driverNumber)?.NumberOfLaps ?? 0) + 1;
+        // The lap the sample belongs to, by its own time; before any lap has been seen counted,
+        // the lap count now (NumberOfLaps is the laps completed, so the lap being driven is one
+        // more)
+        var crossing = crossings?.LapAt(driverNumber, utc);
+        var lap =
+            crossing?.Lap
+            ?? (timingData.Latest.Lines.GetValueOrDefault(driverNumber)?.NumberOfLaps ?? 0) + 1;
 
-        if (lap != state.CurrentLap)
+        if (lap > state.CurrentLap)
         {
-            if (state.Current.Count > 0)
-            {
-                state.Completed.Add(new TelemetryLap(state.CurrentLap, state.Current.ToArray()));
-                if (state.Completed.Count > CompletedLapsToKeep)
-                {
-                    state.Completed.RemoveAt(0);
-                }
-            }
-            state.Current = [];
-            state.CurrentLap = lap;
-            state.LapStartUtc = utc;
-            state.Distance = 0;
+            StartLap(driverNumber, state, lap, crossing?.Start ?? utc);
         }
-        else
+        else if (lap < state.CurrentLap)
         {
-            var dt = utc - state.LastUtc;
-            if (dt <= MaxSampleGap && state.Current.Count > 0)
-            {
-                // Trapezoidal integration of speed (km/h) over the interval, in metres.
-                var previousSpeed = state.Current[^1].Speed;
-                var speed = channels.Speed ?? previousSpeed;
-                state.Distance += (previousSpeed + speed) / 2.0 / 3.6 * dt.TotalSeconds;
-            }
+            // A sample from a lap already closed, arriving out of order: too late to place
+            return;
+        }
+
+        var dt = utc - state.LastUtc;
+        if (state.Current.Count > 0 && dt <= MaxSampleGap)
+        {
+            // Trapezoidal integration of speed (km/h) over the interval, in metres
+            var previousSpeed = state.Current[^1].Speed;
+            var speed = channels.Speed ?? previousSpeed;
+            state.Distance += (previousSpeed + speed) / 2.0 / 3.6 * dt.TotalSeconds;
+        }
+        else if (state.Current.Count == 0 && utc > state.LapStartUtc)
+        {
+            // The first sample of a lap: the distance covered since the line
+            state.Distance =
+                (channels.Speed ?? 0) / 3.6 * Math.Min(MaxSampleGap.TotalSeconds, (utc - state.LapStartUtc).TotalSeconds);
         }
 
         state.LastUtc = utc;

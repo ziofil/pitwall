@@ -26,6 +26,16 @@ public sealed class SampleMexicoFixture() : SampleSessionFixture("2026_Mexico_Ci
 public sealed class SampleQualifyingFixture()
     : SampleSessionFixture("2024_Imola_Qualifying", int.MaxValue);
 
+/// <summary>
+/// The qualifying demo (2026 United States GP) in Q3, as both McLarens are on their final push
+/// laps: they cross the line at 22:01:10 and 22:01:18.
+/// </summary>
+public sealed class SampleQualifyingDemoFixture()
+    : SampleSessionFixture(
+        DemoSession.Qualifying,
+        new DateTimeOffset(2026, 10, 24, 22, 0, 40, TimeSpan.Zero)
+    );
+
 /// <summary>Pitwall just launched: no session started, no data.</summary>
 public sealed class NoSessionFixture() : SampleSessionFixture(null, 0);
 
@@ -39,6 +49,16 @@ public abstract class SampleSessionFixture
 
     /// <summary>Whether the circuit outline could be downloaded for the track page.</summary>
     public bool HasCircuitMap { get; }
+
+    /// <summary>Replays a built-in demo up to a moment of it.</summary>
+    protected SampleSessionFixture(DemoSession demo, DateTimeOffset until)
+        : this(null, 0)
+    {
+        var clock = Services.GetRequiredService<IDateTimeProvider>();
+        SessionReplay.Replay(Services, demo.Unpack(), () => clock.Utc >= until);
+        HasCircuitMap =
+            Services.GetRequiredService<SessionInfoProcessor>().Latest.CircuitPoints.Count > 0;
+    }
 
     protected SampleSessionFixture(string? session, int replayToLap)
     {

@@ -199,6 +199,7 @@ public class MainDisplay(
                 ("▲ ▼", "change team (also Tab)"),
                 ("Enter", "pick from the team list"),
                 ("Esc", "back to this menu"),
+                ("Space", "sync to TV at the start"),
                 ("D", "stream delay"),
                 ("P", "pause the clock"),
             }

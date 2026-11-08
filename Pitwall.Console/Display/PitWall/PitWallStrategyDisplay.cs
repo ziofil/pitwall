@@ -23,6 +23,7 @@ public sealed class PitWallStrategyDisplay(
     PitStopSeriesProcessor pitStops,
     PitLaneTimeCollectionProcessor pitLaneTimes,
     LapCountProcessor lapCount,
+    LapDelta lapDelta,
     ITerminalImages images
 ) : IDisplay
 {
@@ -90,17 +91,15 @@ public sealed class PitWallStrategyDisplay(
 
         if (!sessionInfo.Latest.IsRace())
         {
-            _image.Clear();
+            // Qualifying and practice: the live delta to each car's best lap, where races have
+            // the race trace
             return Task.FromResult(
                 components.Page(
                     Screen,
                     new Layout("Strategy").SplitRows(
+                        new Layout("Delta", LapDeltaPanel(team)),
                         new Layout("Cars", cars).Size(RowsBelowTrace - 1),
-                        new Layout("Notes", notes).Size(1),
-                        new Layout(
-                            "Trace",
-                            new Text(" The race trace is drawn in races.", PitWallTheme.Dim)
-                        )
+                        new Layout("Notes", notes).Size(1)
                     )
                 )
             );
@@ -114,6 +113,123 @@ public sealed class PitWallStrategyDisplay(
         );
 
         return Task.FromResult(components.Page(Screen, body));
+    }
+
+    /// <summary>The live delta graph for each of the team's cars, side by side.</summary>
+    private IRenderable LapDeltaPanel(PitWallTeam team)
+    {
+        var lines = timingData.Latest.Lines;
+        // Every car's mini sectors are counted the same, as some cars haven't reached them all
+        var counts = Enumerable
+            .Range(0, 3)
+            .Select(sector =>
+                lines
+                    .Values.Select(x =>
+                        x.Sectors.GetValueOrDefault($"{sector}")?.Segments.Keys.DefaultIfEmpty(-1).Max() + 1
+                        ?? 0
+                    )
+                    .DefaultIfEmpty(0)
+                    .Max()
+            )
+            .ToArray();
+        // The session's fastest lap, to tell when a car's on course to beat it
+        var fastest = lines
+            .Values.Select(x => x.BestLapTime.ToTimeSpan()?.TotalSeconds)
+            .Where(x => x > 0)
+            .DefaultIfEmpty()
+            .Min();
+        var cars = team
+            .DriverNumbers.Select(number =>
+            {
+                var driver = context.Driver(number);
+                var line = lines.GetValueOrDefault(number);
+                IReadOnlyList<IReadOnlyList<TimingDataPoint.Driver.StatusFlags?>> segments =
+                [
+                    .. Enumerable
+                        .Range(0, 3)
+                        .Select(sector =>
+                            (IReadOnlyList<TimingDataPoint.Driver.StatusFlags?>)
+                                [
+                                    .. Enumerable
+                                        .Range(0, counts[sector])
+                                        .Select(i =>
+                                            line?.Sectors.GetValueOrDefault($"{sector}")
+                                                ?.Segments.GetValueOrDefault(i)
+                                                ?.Status
+                                        ),
+                                ]
+                        ),
+                ];
+                var trace = lapDelta.Trace(number);
+                var liveColour =
+                    trace is null ? "e6e6e6"
+                    : fastest is { } f && trace.BestSeconds + trace.Live < f ? "cc33ff"
+                    : trace.Live < 0 ? "00dc00"
+                    : "ffe600";
+                return new DeltaCar(
+                    $"{driver.RacingNumber} {driver.Tla}",
+                    PitWallTheme.TeamColour(team.Colour).ToHex(),
+                    trace,
+                    segments,
+                    liveColour
+                );
+            })
+            .ToList();
+        // One scale for both cars, so their graphs compare at a glance
+        var scale = LapDeltaChart.Range(cars.Select(x => x.Trace));
+        cars = [.. cars.Select(x => x with { Scale = scale })];
+
+        IRenderable chart;
+        if (_image.Supported)
+        {
+            // Drawn as an image inside the panel's border, see PostContentDrawAsync
+            var (columns, rows) = _image.WindowCells;
+            _image.Update(
+                PitWallComponents.HeaderHeight + 1,
+                1,
+                columns - 2,
+                rows - PitWallComponents.BodyRowsOffset - RowsBelowTrace - 2,
+                (width, height) => LapDeltaChart.Render(cars, width, height)
+            );
+            chart = new Text("");
+        }
+        else
+        {
+            _image.Clear();
+            chart = new Layout("Cars").SplitColumns(
+                [
+                    .. cars.Select(car =>
+                        new Layout(car.Title).SplitRows(
+                            new Layout(
+                                "Title",
+                                new SingleLine(
+                                    $"[bold #{car.Colour}] {car.Title}[/]"
+                                        + (
+                                            car.Trace is { } trace
+                                                ? $"  [bold #{car.LiveColour}]{trace.Live:+0.000;-0.000}[/] [grey]vs best {PitWallTheme.LapTime(trace.BestSeconds)}[/]"
+                                                : ""
+                                        )
+                                )
+                            ).Size(1),
+                            new Layout(
+                                "Graph",
+                                new CanvasRenderable(canvas => LapDeltaChart.Draw(canvas, car), 10)
+                            )
+                        )
+                    ),
+                ]
+            );
+        }
+
+        return new Panel(chart)
+        {
+            Header = new PanelHeader(
+                "[bold] LAP DELTA [/][grey]the lap in progress against each car's own best · faster up · coloured by mini sector [/]"
+            ),
+            Expand = true,
+            Padding = new Padding(0),
+            BorderStyle = new Style(foreground: PitWallTheme.Grid),
+        };
     }
 
     private IRenderable RaceTracePanel(PitWallTeam team)

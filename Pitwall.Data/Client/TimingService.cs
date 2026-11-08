@@ -9,7 +9,8 @@ using Pitwall.Data;
 public class TimingService(
     IDateTimeProvider dateTimeProvider,
     IEnumerable<IProcessor> processors,
-    ILogger<TimingService> logger
+    ILogger<TimingService> logger,
+    SessionStarts? sessionStarts = null
 ) : BackgroundService, ITimingService
 {
     private ConcurrentQueue<(string type, string? data, DateTimeOffset timestamp)> _recent = new();
@@ -18,8 +19,12 @@ public class TimingService(
 
     public ILogger Logger { get; } = logger;
 
-    public async Task EnqueueAsync(string type, string? data, DateTimeOffset timestamp) =>
+    public async Task EnqueueAsync(string type, string? data, DateTimeOffset timestamp)
+    {
+        // Session starts are noted on arrival, ahead of the delay, for syncing to a broadcast
+        sessionStarts?.Observe(type, data);
         await _workItems.Writer.WriteAsync((type, data, timestamp));
+    }
 
     public List<(string type, string? data, DateTimeOffset timestamp)> GetQueueSnapshot() =>
         _recent.ToList();
@@ -95,6 +100,7 @@ public class TimingService(
             ProcessData("LapCount", obj["LapCount"]?.ToString(), DateTimeOffset.UtcNow);
             ProcessData("WeatherData", obj["WeatherData"]?.ToString(), DateTimeOffset.UtcNow);
             ProcessData("SessionInfo", obj["SessionInfo"]?.ToString(), DateTimeOffset.UtcNow);
+            sessionStarts?.Observe("SessionData", obj["SessionData"]?.ToString());
             ProcessData("CarData.z", obj["CarData.z"]?.ToString(), DateTimeOffset.UtcNow);
             ProcessData("Position.z", obj["Position.z"]?.ToString(), DateTimeOffset.UtcNow);
             ProcessData("TeamRadio", obj["TeamRadio"]?.ToString(), DateTimeOffset.UtcNow);
@@ -128,6 +134,7 @@ public class TimingService(
     {
         if (data is null)
             return;
+        sessionStarts?.Observe(type, data);
         if (type.EndsWith(".z"))
         {
             type = type.Replace(".z", string.Empty);

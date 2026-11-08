@@ -21,7 +21,8 @@ public sealed class PitWallTimingDisplay(
     TimingSmoother smoother,
     TimingAppDataProcessor timingAppData,
     RaceControlMessageProcessor raceControl,
-    IDateTimeProvider dateTimeProvider
+    IDateTimeProvider dateTimeProvider,
+    LapDelta lapDelta
 ) : IDisplay
 {
     private const string Cyan = "#33ccff";
@@ -174,13 +175,19 @@ public sealed class PitWallTimingDisplay(
             ("DRIVER", shortNames ? 6 : 18, Justify.Left, ""),
             ("BEST LAP", 10, Justify.Right, ""),
             ("GAP", 8, Justify.Right, ""),
+            ("Δ BEST", 8, Justify.Right, ""),
             ("S1", 7, Justify.Right, best[0]),
             ("S2", 7, Justify.Right, best[1]),
             ("S3", 7, Justify.Right, best[2]),
             ("LAPS", 5, Justify.Right, ""),
         ];
-        var segments = MiniSectors(columns, available);
+        // The live delta takes the place of the mini sectors: it says the same, continuously
         var table = NewTable([.. columns]);
+        var fastest = lines
+            .Values.Select(x => x.BestLapTime.ToTimeSpan()?.TotalSeconds)
+            .Where(x => x > 0)
+            .DefaultIfEmpty()
+            .Min();
 
         foreach (var (number, line) in lines)
         {
@@ -197,9 +204,10 @@ public sealed class PitWallTimingDisplay(
                 Name(number, knockedOut, shortNames),
                 new Text(line.BestLapTime?.Value ?? "", PitWallTheme.Normal),
                 new Text(gap, PitWallTheme.Normal),
-                Sector(line, 0, segments),
-                Sector(line, 1, segments),
-                Sector(line, 2, segments),
+                DeltaToBest(number, fastest),
+                Sector(line, 0, null),
+                Sector(line, 1, null),
+                Sector(line, 2, null),
                 new Text($"{line.NumberOfLaps}", PitWallTheme.Normal)
             );
         }
@@ -325,6 +333,22 @@ public sealed class PitWallTimingDisplay(
         );
         var timeText = ShortSector(time?.Value).PadLeft(7);
         return new Markup($"{bars} [{PitWallTheme.TimeStyle(time).ToMarkup()}]{timeText}[/]");
+    }
+
+    /// <summary>
+    /// The live delta of a car's push lap to its own best: purple when it's on course to go
+    /// fastest of all, green when it's ahead of its best, yellow when behind. Blank when it
+    /// isn't on a push lap.
+    /// </summary>
+    private IRenderable DeltaToBest(string number, double? fastest)
+    {
+        if (lapDelta.Trace(number) is not { } trace)
+            return new Text("");
+        var colour =
+            fastest is { } f && trace.BestSeconds + trace.Live < f ? Purple
+            : trace.Live < 0 ? "#00dc00"
+            : Yellow;
+        return new Markup($"[bold {colour}]{trace.Live:+0.000;-0.000}[/]");
     }
 
     private static string SegmentColour(TimingDataPoint.Driver.StatusFlags? status) =>

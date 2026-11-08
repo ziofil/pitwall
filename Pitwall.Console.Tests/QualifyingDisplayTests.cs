@@ -30,11 +30,14 @@ public class QualifyingDisplayTests(SampleQualifyingFixture fixture)
     }
 
     [Fact]
-    public async Task StrategyPageExplainsTheRaceTraceIsForRaces()
+    public async Task StrategyPageShowsTheLapDeltaInQualifying()
     {
         var text = await RenderAsync<PitWallStrategyDisplay>();
 
-        Assert.Contains("The race trace is drawn in races", text);
+        // Qualifying has the lap delta where races have the race trace; this recording has no
+        // car telemetry, so there's no delta to show
+        Assert.Contains("LAP DELTA", text);
+        Assert.Contains("NOT ON A PUSH LAP", text);
         Assert.DoesNotContain("RACE TRACE", text);
         Assert.Contains("NOR", text);
     }
