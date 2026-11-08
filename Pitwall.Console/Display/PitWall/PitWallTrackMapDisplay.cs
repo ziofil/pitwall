@@ -8,8 +8,11 @@ namespace Pitwall.Console;
 
 /// <summary>
 /// The track position page, laid out like the team track displays seen on pit walls: a lap ring
-/// showing where every car is around the lap (with the latest race control messages and the
-/// clocks inside), next to the circuit outline with the cars on it. The team's cars are drawn
+/// (with the latest race control messages and the clocks inside), next to the circuit outline
+/// with the cars on it. In races the ring is one lap in time: the leader at the top and every
+/// car behind it by its gap, with marks where the team's cars would rejoin if they pitted now
+/// (using the pit loss for the track status, so it shrinks under a safety car or VSC). In other
+/// sessions, where gaps are lap times rather than distances, the ring is the lap in distance. The team's cars are drawn
 /// in the team colour, cars off track in red, cars in the pit lane in cyan; cars out of the race
 /// are left off.
 /// Terminals with inline graphics get a drawn image with solid lines and real text; others get a
@@ -27,6 +30,8 @@ public sealed class PitWallTrackMapDisplay(
     RaceControlMessageProcessor raceControl,
     ExtrapolatedClockProcessor extrapolatedClock,
     IDateTimeProvider dateTimeProvider,
+    TimingSmoother smoother,
+    TrackStatusProcessor trackStatus,
     ITerminalImages images
 ) : IDisplay
 {
@@ -140,7 +145,18 @@ public sealed class PitWallTrackMapDisplay(
                         ).ToHex()
                     )
                 )
-                .ToList()
+                .ToList(),
+            _ring?.LapSeconds,
+            _ring is null
+                ? null
+                :
+                [
+                    .. _ring.Rejoins.Select(x => new RejoinMark(
+                        context.Driver(x.Number).Tla ?? x.Number,
+                        x.Progress,
+                        PitWallTheme.TeamColour(context.Team?.Colour).ToHex()
+                    )),
+                ]
         );
 
     /// <summary>The scene for the current data, or <c>null</c> if there's nothing to draw.</summary>
@@ -202,7 +218,91 @@ public sealed class PitWallTrackMapDisplay(
                 )
             );
         }
-        return cars;
+
+        _ring = TimeRing(cars);
+        return _ring is null
+            ? cars
+            : [.. cars.Select(x => x with { Progress = _ring.Progress.GetValueOrDefault(x.Number, x.Progress) })];
+    }
+
+    /// <summary>The ring in time: each car's place on it, the lap time it spans, and rejoins.</summary>
+    internal sealed record TimeRingLayout(
+        double LapSeconds,
+        Dictionary<string, double> Progress,
+        List<(string Number, double Progress)> Rejoins,
+        PitLossEstimate PitLoss
+    );
+
+    // The latest layout, for the scene and the text inside the ring
+    private TimeRingLayout? _ring;
+
+    /// <summary>
+    /// Places the cars on a ring that's one lap in time, in races: the leader at the top and each
+    /// car behind it by its gap to the leader as a share of a lap. Lapped cars wrap round. Gaps
+    /// glide between feed updates; a car with no gap in seconds (e.g. lapped with no interval
+    /// either) keeps the place its track position gives it. <c>null</c> outside races or before
+    /// there are lap times.
+    /// </summary>
+    internal TimeRingLayout? TimeRing(List<CarOnTrack> cars)
+    {
+        if (!sessionInfo.Latest.IsRace() || cars.Count == 0)
+            return null;
+
+        // A lap takes what the field's laps take now, so a safety car or rain slows the ring too
+        var lapTimes = timingData
+            .Latest.Lines.Values.Where(x => x.Retired != true && x.Stopped != true)
+            .Select(x => x.LastLapTime?.ToTimeSpan()?.TotalSeconds ?? 0)
+            .Where(x => x > 0)
+            .ToList();
+        if (lapTimes.Count == 0)
+            return null;
+        var lapSeconds = RaceStrategy.Median(lapTimes);
+
+        var lines = timingData.Latest.GetOrderedLines();
+        var leader = lines.Keys.FirstOrDefault(x => cars.Any(c => c.Number == x));
+        var leaderCar = cars.FirstOrDefault(x => x.Number == leader);
+        if (leaderCar is null)
+            return null;
+
+        double? Gap(string number)
+        {
+            if (number == leader)
+                return 0;
+            var line = lines.GetValueOrDefault(number);
+            return line?.GapToLeaderSeconds() is > 0 && smoother.GapToLeader(number) is { } smooth
+                ? smooth
+                : (double?)lines.SmartGapToLeaderSeconds(number);
+        }
+
+        // Behind the leader is anticlockwise from the top, as on a lap ring where the leader is
+        // further round
+        static double Place(double gap, double lap) => (((-gap / lap) % 1) + 1) % 1;
+
+        var progress = new Dictionary<string, double>();
+        foreach (var car in cars)
+        {
+            progress[car.Number] = Gap(car.Number) is { } gap and >= 0
+                ? Place(gap, lapSeconds)
+                // No gap in seconds: how far behind the leader it is on track, in time
+                : Place(((leaderCar.Progress - car.Progress + 1) % 1) * lapSeconds, lapSeconds);
+        }
+
+        // Where the team's cars would come out if they pitted now: their gap plus the time a
+        // stop costs under the current track status
+        var circuitPitLoss = sessionInfo.Latest.PitLoss;
+        var pitLoss = RaceStrategy.ForTrackStatus(
+            RaceStrategy.EstimatePitLoss(timingData.DriversByLap, circuitPitLoss),
+            circuitPitLoss,
+            trackStatus.Latest?.Status
+        );
+        var rejoins = (context.Team?.DriverNumbers ?? [])
+            .Where(x => cars.Any(c => c.Number == x) && lines.GetValueOrDefault(x)?.InPit != true)
+            .Select(x => (Number: x, Gap: Gap(x)))
+            .Where(x => x.Gap is >= 0)
+            .Select(x => (x.Number, Place(x.Gap!.Value + pitLoss.Seconds, lapSeconds)))
+            .ToList();
+
+        return new TimeRingLayout(lapSeconds, progress, rejoins, pitLoss);
     }
 
     private List<(int x, int y)>? _distancesCircuit;
@@ -294,7 +394,7 @@ public sealed class PitWallTrackMapDisplay(
         if (radius < 8)
             return;
 
-        // The ring itself, with ticks every tenth of a lap
+        // The ring itself, with ticks every tenth of a lap, or every 10 seconds on a ring in time
         // Two dots thick, so it reads as a solid line
         for (var step = 0; step < 1440; step++)
         {
@@ -308,12 +408,35 @@ public sealed class PitWallTrackMapDisplay(
                 );
             }
         }
-        for (var tenth = 0; tenth < 10; tenth++)
+        var marks = _ring is { } timeRing
+            ? Enumerable
+                .Range(0, (int)Math.Ceiling(timeRing.LapSeconds / 10))
+                .Select(i => (1 - (i * 10 / timeRing.LapSeconds)) % 1)
+            : Enumerable.Range(0, 10).Select(i => i / 10.0);
+        foreach (var mark in marks)
         {
-            var angle = tenth / 10.0 * 2 * Math.PI;
+            var angle = mark * 2 * Math.PI;
             var (x0, y0) = PointOnRing(centreX, centreY, radius - 2, angle);
             var (x1, y1) = PointOnRing(centreX, centreY, radius - 4, angle);
-            canvas.Line(x0, y0, x1, y1, tenth == 0 ? Color.White : PitWallTheme.Grid);
+            canvas.Line(x0, y0, x1, y1, mark == 0 ? Color.White : PitWallTheme.Grid);
+        }
+
+        // Where the team's cars would rejoin if they pitted now, inside the ring
+        foreach (var (number, progress) in _ring?.Rejoins ?? [])
+        {
+            var angle = progress * 2 * Math.PI;
+            var colour = PitWallTheme.TeamColour(context.Team?.Colour);
+            var (x0, y0) = PointOnRing(centreX, centreY, radius - 5, angle);
+            var (x1, y1) = PointOnRing(centreX, centreY, radius - 8, angle);
+            canvas.Line(x0, y0, x1, y1, colour);
+            var (lx, ly) = PointOnRing(centreX, centreY, radius - 14, angle);
+            var label = $"{context.Driver(number).Tla} PIT";
+            canvas.Label(
+                (lx / 2) - (label.Length / 2),
+                ly / 4,
+                label,
+                new Style(foreground: colour, decoration: Decoration.Bold)
+            );
         }
 
         // Cars as radial ticks, highlighted cars drawn last so they sit on top
@@ -373,7 +496,7 @@ public sealed class PitWallTrackMapDisplay(
         canvas.Label(
             (centreX / 2) - 1,
             Math.Max(0, ((centreY - radius) / 4) - 1),
-            "S/F",
+            _ring is null ? "S/F" : "LEADER",
             PitWallTheme.Dim
         );
     }
@@ -394,6 +517,18 @@ public sealed class PitWallTrackMapDisplay(
         if (lines.Count > 0)
             lines.Add(("", Style.Plain));
         lines.Add(($"ON TRACK {carsOnTrack}", PitWallTheme.Normal));
+        if (_ring is { } ring)
+        {
+            // The ring's scale, and the pit loss the rejoin marks use
+            var status = ring.PitLoss.Source switch
+            {
+                PitLossSource.SafetyCar => " UNDER SC",
+                PitLossSource.VirtualSafetyCar => " UNDER VSC",
+                _ => "",
+            };
+            lines.Add(($"RING = 1 LAP = {PitWallTheme.LapTime(ring.LapSeconds)}", PitWallTheme.Dim));
+            lines.Add(($"PIT LOSS {ring.PitLoss.Seconds:0.0}s{status}", PitWallTheme.Dim));
+        }
 
         var localOffset = string.IsNullOrWhiteSpace(sessionInfo.Latest.GmtOffset)
             ? TimeSpan.Zero

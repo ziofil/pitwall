@@ -77,21 +77,24 @@ public sealed class MainMenu(
                         }
                     )
                 );
-                items.Add(
-                    new(
-                        "Demo: 2026 Mexico City Grand Prix",
-                        "Try Pitwall on a real race: Mexico City 2026 from lap 28, with a safety car and a red flag. Built in, nothing to download.",
-                        async () =>
-                        {
-                            state.SessionStarted = true;
-                            _ = jsonTimingClient.LoadSimulationDataAsync(
-                                DemoSession.Unpack(),
-                                DemoSession.StartAt
-                            );
-                            await Go(Screen.PitWallTiming);
-                        }
-                    )
-                );
+                foreach (var demo in DemoSession.All)
+                {
+                    items.Add(
+                        new(
+                            demo.Name,
+                            demo.Description,
+                            async () =>
+                            {
+                                state.SessionStarted = true;
+                                _ = jsonTimingClient.LoadSimulationDataAsync(
+                                    demo.Unpack(),
+                                    demo.StartAt
+                                );
+                                await Go(Screen.PitWallTiming);
+                            }
+                        )
+                    );
+                }
                 items.Add(
                     new(
                         "Replay a session",

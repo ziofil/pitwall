@@ -24,12 +24,22 @@ public sealed record TrackCar(
 /// <param name="Circuit">The circuit outline, in the same coordinates as the cars.</param>
 /// <param name="Corners">Corner numbers and where they are.</param>
 /// <param name="Messages">Lines of text shown inside the lap ring, with hex colours.</param>
+/// <param name="RingLapSeconds">
+/// When set, the ring is one lap in time: the leader at the top and each car behind it by its
+/// gap, a full turn being this many seconds. Otherwise the ring is the lap in distance.
+/// </param>
 public sealed record TrackScene(
     IReadOnlyList<(int X, int Y)> Circuit,
     IReadOnlyList<(int Number, float X, float Y)> Corners,
     IReadOnlyList<TrackCar> Cars,
-    IReadOnlyList<(string Text, string Colour)> Messages
+    IReadOnlyList<(string Text, string Colour)> Messages,
+    double? RingLapSeconds = null,
+    IReadOnlyList<RejoinMark>? Rejoins = null
 );
+
+/// <summary>Where one of the team's cars would rejoin if it pitted now, on the ring in time.</summary>
+/// <param name="Progress">Around the ring, from 0 to 1, as for the cars.</param>
+public sealed record RejoinMark(string Tla, double Progress, string Colour);
 
 /// <summary>
 /// Draws the track page as an image: the lap ring on the left and the circuit map on the right,
@@ -66,6 +76,7 @@ public static class TrackMapRenderer
         int Width,
         int Height,
         IReadOnlyList<(int X, int Y)> Circuit,
+        int RingScale,
         SKImage Image
     )? _staticLayer;
 
@@ -90,6 +101,7 @@ public static class TrackMapRenderer
                 && cached.Width == width
                 && cached.Height == height
                 && ReferenceEquals(cached.Circuit, scene.Circuit)
+                && cached.RingScale == RingScale(scene)
             )
             {
                 return cached.Image;
@@ -100,10 +112,14 @@ public static class TrackMapRenderer
             Draw(surface.Canvas, scene, width, height, staticLayer: true);
             _staticLayer?.Image.Dispose();
             var image = surface.Snapshot();
-            _staticLayer = (width, height, scene.Circuit, image);
+            _staticLayer = (width, height, scene.Circuit, RingScale(scene), image);
             return image;
         }
     }
+
+    // The ring's marks depend on the lap time when it's in time, to the second
+    private static int RingScale(TrackScene scene) =>
+        scene.RingLapSeconds is { } lap ? (int)Math.Round(lap) : -1;
 
     /// <summary>Draws either the parts that never change, or the cars and messages.</summary>
     private static void Draw(
@@ -158,8 +174,9 @@ public static class TrackMapRenderer
         canvas.DrawCircle(centre, radius - (unit * 0.45f), edge);
         canvas.DrawCircle(centre, radius + (unit * 0.45f), edge);
 
-        // Every tenth of the lap is a small dot inside the ring, so any bar across the ring is a
-        // car; the start/finish line is a bright line across it
+        // Dots inside the ring mark every tenth of the lap, or every 10 seconds behind the leader
+        // on a ring in time, so any bar across the ring is a car; the start/finish line (or the
+        // leader's place) is a bright line across it
         using var tenthDot = new SKPaint { Color = Muted, IsAntialias = true };
         using var startLine = new SKPaint
         {
@@ -168,10 +185,15 @@ public static class TrackMapRenderer
             StrokeWidth = Math.Max(2f, unit * 0.22f),
             StrokeCap = SKStrokeCap.Round,
         };
-        for (var tenth = 1; tenth < 10; tenth++)
+        var marks = scene.RingLapSeconds is { } lap
+            ? Enumerable
+                .Range(1, Math.Max(0, (int)Math.Ceiling(lap / 10) - 1))
+                .Select(i => 1 - (i * 10 / lap))
+            : Enumerable.Range(1, 9).Select(i => i / 10.0);
+        foreach (var mark in marks)
         {
             canvas.DrawCircle(
-                OnRing(centre, radius - (unit * 1.4f), tenth / 10.0 * 2 * Math.PI),
+                OnRing(centre, radius - (unit * 1.4f), mark * 2 * Math.PI),
                 unit * 0.14f,
                 tenthDot
             );
@@ -185,7 +207,7 @@ public static class TrackMapRenderer
         using var mutedText = new SKPaint { Color = Muted, IsAntialias = true };
         DrawCentredText(
             canvas,
-            "S/F",
+            scene.RingLapSeconds is null ? "S/F" : "LEADER",
             OnRing(centre, radius + (unit * 2.0f), 0),
             smallFont,
             mutedText
@@ -200,6 +222,40 @@ public static class TrackMapRenderer
         float unit
     )
     {
+        // Where the team's cars would rejoin if they pitted now: a hollow arrow inside the ring
+        // pointing at the spot, with the car's name, under the cars so a car there stays visible
+        using var rejoinFont = new SKFont(Bold, unit * 0.7f);
+        foreach (var rejoin in scene.Rejoins ?? [])
+        {
+            var angle = rejoin.Progress * 2 * Math.PI;
+            var colour = SKColor.Parse(rejoin.Colour);
+            using var outline = new SKPaint
+            {
+                Color = colour,
+                IsAntialias = true,
+                IsStroke = true,
+                StrokeWidth = Math.Max(1.5f, unit * 0.16f),
+                StrokeJoin = SKStrokeJoin.Round,
+            };
+            var tip = OnRing(centre, radius - (unit * 0.7f), angle);
+            var back = radius - (unit * 2.0f);
+            var spread = unit * 0.6f / back;
+            using var arrow = new SKPath();
+            arrow.MoveTo(tip);
+            arrow.LineTo(OnRing(centre, back, angle - spread));
+            arrow.LineTo(OnRing(centre, back, angle + spread));
+            arrow.Close();
+            canvas.DrawPath(arrow, outline);
+            using var text = new SKPaint { Color = colour, IsAntialias = true };
+            DrawCentredText(
+                canvas,
+                $"{rejoin.Tla} PIT",
+                OnRing(centre, radius - (unit * 4.2f), angle),
+                rejoinFont,
+                text
+            );
+        }
+
         // Cars as bars across the ring, background cars first so highlighted ones sit on top
         using var labelFont = new SKFont(Bold, unit * 0.9f);
         var placed = new List<SKRect>();

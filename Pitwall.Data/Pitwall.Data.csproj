@@ -29,5 +29,6 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Pitwall.Console.Tests" />
+    <InternalsVisibleTo Include="Pitwall.Data.Tests" />
   </ItemGroup>
 </Project>

@@ -124,11 +124,12 @@ public sealed class PitWallComponents(
         // While the delay is being typed, its box takes the place of the tabs
         if (state.TextInput is { Title: DelayInputHandler.Title } input)
         {
+            // The units are part of what's typed, so the box has no fixed unit after it
             var error = input.Error is null
-                ? "[grey]ms, or 34.6s, or 0:34.6 · 0 for none[/]"
+                ? "[grey]34600 (ms), 34.6s or 0:34.6 · 0 for none · Enter to set, Esc to cancel[/]"
                 : $"[#ff3333]{Markup.Escape(input.Error)}[/]";
             tabs =
-                $"[bold #{teamHex}] {DelayInputHandler.Title} [/][black on white] {Markup.Escape(input.Text)}▏ [/] [grey]ms[/]   {error}";
+                $"[bold #{teamHex}] {DelayInputHandler.Title} [/][black on white] {Markup.Escape(input.Text)}▏ [/]   {error}";
         }
 
         return new Rows(

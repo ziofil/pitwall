@@ -76,7 +76,8 @@ public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<Samp
         try
         {
             var text = await RenderAsync<PitWallTimingDisplay>();
-            Assert.Contains("LIVE DELAY  34600▏  ms", text);
+            Assert.Contains("LIVE DELAY  34600▏ ", text);
+            Assert.DoesNotContain("▏  ms", text);
             Assert.DoesNotContain("2 STRATEGY", text);
         }
         finally
@@ -199,7 +200,41 @@ public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<Samp
         }
         Assert.Contains("ON TRACK", text);
         Assert.Contains("HAM", text);
-        Assert.Contains("S/F", text);
+        // A race, so the ring is in time, led from the top, with the pit rejoin marks
+        Assert.Contains("LEADER", text);
+        Assert.Contains("RING = 1 LAP", text);
+        Assert.Contains("HAM PIT", text);
+    }
+
+    [Fact]
+    public void RingPlacesCarsByTheirGapInTime()
+    {
+        fixture.Services.GetRequiredService<State>().SelectedTeam = "Mercedes";
+        var scene = fixture.Services.GetRequiredService<PitWallTrackMapDisplay>().CurrentScene();
+        if (scene is null)
+        {
+            Assert.False(fixture.HasCircuitMap);
+            return;
+        }
+
+        var lap = Assert.IsType<double>(scene.RingLapSeconds);
+        Assert.InRange(lap, 80, 120);
+        var lines = fixture.Services.GetRequiredService<TimingDataProcessor>().Latest.GetOrderedLines();
+        var cars = scene.Cars.ToDictionary(x => x.Number);
+
+        // The leader at the top, and P2 behind it by its gap as a share of the lap
+        var (leader, second) = (lines.Keys.First(), lines.Keys.ElementAt(1));
+        Assert.Equal(0, cars[leader].Progress, 6);
+        var gap = (double)lines.SmartGapToLeaderSeconds(second)!.Value;
+        // Within a second: the ring uses the gap smoothed between feed updates
+        Assert.InRange((1 - cars[second].Progress) * lap, gap - 1, gap + 1);
+
+        // Both team cars get a rejoin mark, a pit loss further back than the car itself
+        var rejoins = Assert.IsAssignableFrom<IReadOnlyList<RejoinMark>>(scene.Rejoins);
+        Assert.Equal(["HAM", "RUS"], rejoins.Select(x => x.Tla).Order());
+        var hamilton = cars["44"].Progress;
+        var behind = (hamilton - rejoins.Single(x => x.Tla == "HAM").Progress + 1) % 1;
+        Assert.InRange(behind * lap, 15, 35);
     }
 
     [Fact]

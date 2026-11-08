@@ -55,14 +55,22 @@
     <InternalsVisibleTo Include="Pitwall.Console.Tests" />
   </ItemGroup>
   <ItemGroup>
-    <!-- The demo session (2026 Mexico City Grand Prix), built in so the demo works anywhere -->
+    <!-- The demo sessions, built in so the demos work anywhere: see DemoSession -->
     <EmbeddedResource
-      Include="../Sample Data/2026_Mexico_City_Race/subscribe.json"
-      LogicalName="Demo.subscribe.json"
+      Include="../Sample Data/2026_Austin_Race/subscribe.json"
+      LogicalName="Demo.2026_Austin_Race.subscribe.json"
     />
     <EmbeddedResource
-      Include="../Sample Data/2026_Mexico_City_Race/live.jsonl"
-      LogicalName="Demo.live.jsonl"
+      Include="../Sample Data/2026_Austin_Race/live.jsonl.gz"
+      LogicalName="Demo.2026_Austin_Race.live.jsonl.gz"
+    />
+    <EmbeddedResource
+      Include="../Sample Data/2026_Austin_Qualifying/subscribe.json"
+      LogicalName="Demo.2026_Austin_Qualifying.subscribe.json"
+    />
+    <EmbeddedResource
+      Include="../Sample Data/2026_Austin_Qualifying/live.jsonl.gz"
+      LogicalName="Demo.2026_Austin_Qualifying.live.jsonl.gz"
     />
   </ItemGroup>
   <ItemGroup>

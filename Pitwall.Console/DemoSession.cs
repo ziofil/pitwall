@@ -1,52 +1,86 @@
+using System.IO.Compression;
 using System.Reflection;
 
 namespace Pitwall.Console;
 
 /// <summary>
-/// The demo: the 2026 Mexico City Grand Prix, from lap 28 to the finish, with a safety car and a
-/// red flag. The recording is built into the app, so the demo works without any data downloaded
-/// or recorded, including from the single-file executable.
+/// A session built into the app, so it can be tried without anything downloaded or recorded,
+/// including from the single-file executable. Each is a complete session imported from F1's
+/// archive, kept gzipped and unpacked to a temporary folder the first time it's played.
 /// </summary>
-public static class DemoSession
+/// <param name="Name">What the menu calls it.</param>
+/// <param name="Description">The menu's line about it.</param>
+/// <param name="Folder">Its folder under <c>Sample Data</c>, and its resource names.</param>
+/// <param name="StartAt">Where in the session it starts playing.</param>
+public sealed record DemoSession(
+    string Name,
+    string Description,
+    string Folder,
+    DateTimeOffset StartAt
+)
 {
-    public const string Name = "2026 Mexico City Grand Prix";
-
-    private const string Folder = "2026_Mexico_City_Race";
+    /// <summary>
+    /// The 2026 United States Grand Prix, from just before the lights go out (20:03:49 UTC) to
+    /// the chequered flag, with two virtual safety cars.
+    /// </summary>
+    public static readonly DemoSession Race = new(
+        "Demo: 2026 United States Grand Prix",
+        "The whole race in Austin, lights out to the flag, with pit stops and two virtual safety cars. Built in, nothing to download.",
+        "2026_Austin_Race",
+        new DateTimeOffset(2026, 10, 25, 20, 3, 0, TimeSpan.Zero)
+    );
 
     /// <summary>
-    /// Where the demo starts: the recording's timing data begins at 20:42:11, but car telemetry
-    /// and positions only from 20:43:28, so start just after that rather than with empty pages.
+    /// 2026 United States Grand Prix qualifying, from a minute before Q1 (21:00 UTC) to the end
+    /// of Q3, with no red flags, so it flows without waiting.
     /// </summary>
-    public static readonly DateTimeOffset StartAt = new(2026, 11, 1, 20, 43, 30, TimeSpan.Zero);
-    private static readonly string[] Files = ["subscribe.json", "live.jsonl"];
+    public static readonly DemoSession Qualifying = new(
+        "Demo: 2026 United States GP qualifying",
+        "Q1 to Q3 in Austin, with every car's telemetry. Built in, nothing to download.",
+        "2026_Austin_Qualifying",
+        new DateTimeOffset(2026, 10, 24, 20, 59, 0, TimeSpan.Zero)
+    );
+
+    public static IReadOnlyList<DemoSession> All => [Race, Qualifying];
 
     /// <summary>
-    /// Unpacks the built-in recording to a temporary folder, if it isn't there already, and
-    /// returns that folder, ready to replay.
+    /// Unpacks the recording to a temporary folder, if it isn't there already, and returns that
+    /// folder, ready to replay.
     /// </summary>
-    public static string Unpack()
+    public string Unpack()
     {
         var directory = Path.Join(Path.GetTempPath(), "pitwall-demo", Folder);
         Directory.CreateDirectory(directory);
         var assembly = Assembly.GetExecutingAssembly();
 
-        foreach (var file in Files)
-        {
-            using var resource =
-                assembly.GetManifestResourceStream($"Demo.{file}")
-                ?? throw new InvalidOperationException($"The demo recording is missing {file}");
-            var path = Path.Join(directory, file);
-            if (File.Exists(path) && new FileInfo(path).Length == resource.Length)
-                continue;
+        Stream Resource(string file) =>
+            assembly.GetManifestResourceStream($"Demo.{Folder}.{file}")
+            ?? throw new InvalidOperationException($"The {Name} recording is missing {file}");
 
-            // Write to a temporary name first, so an interrupted unpack is never mistaken for a
-            // complete one
-            var partial = path + ".partial";
-            using (var output = File.Create(partial))
-                resource.CopyTo(output);
-            File.Move(partial, path, overwrite: true);
-        }
+        // A marker records which build of the recording is unpacked (by its compressed size),
+        // so a newer one replaces it; files are written under a temporary name first, so an
+        // interrupted unpack is never mistaken for a complete one
+        using var compressed = Resource("live.jsonl.gz");
+        var marker = Path.Join(directory, ".unpacked");
+        var version = $"{compressed.Length}";
+        if (File.Exists(marker) && File.ReadAllText(marker) == version)
+            return directory;
 
+        WriteAtomically(Path.Join(directory, "subscribe.json"), Resource("subscribe.json"));
+        WriteAtomically(
+            Path.Join(directory, "live.jsonl"),
+            new GZipStream(compressed, CompressionMode.Decompress)
+        );
+        File.WriteAllText(marker, version);
         return directory;
+    }
+
+    private static void WriteAtomically(string path, Stream source)
+    {
+        var partial = path + ".partial";
+        using (source)
+        using (var output = File.Create(partial))
+            source.CopyTo(output);
+        File.Move(partial, path, overwrite: true);
     }
 }
