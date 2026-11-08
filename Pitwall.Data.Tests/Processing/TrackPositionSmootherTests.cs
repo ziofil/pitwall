@@ -63,7 +63,7 @@ public class TrackPositionSmootherTests
     }
 
     [Fact]
-    public void AdvancesWithWallTimeThenHoldsAtTheNewestSample()
+    public void AdvancesWithWallTimeThenEasesIntoTheNewestSample()
     {
         // Arrange
         var clock = new FakeClock();
@@ -81,9 +81,40 @@ public class TrackPositionSmootherTests
             xs.Add(p.x);
         }
 
-        // Assert: it sweeps forward (1500, 2000, 2500) then holds at the newest sample (3000) once
-        // it catches up, never overrunning it.
-        Assert.Equal([1500, 2000, 2500, 3000, 3000], xs.Select(x => Math.Round(x)));
+        // Assert: it sweeps forward at real time (1500, 2000, 2500), slows once it's well ahead of
+        // where it aims to be, then holds at the newest sample (3000), never overrunning it.
+        Assert.Equal([1500, 2000, 2500, 2938, 3000], xs.Select(x => Math.Round(x)));
+    }
+
+    [Fact]
+    public void FallsBackBehindTheNewestSampleAfterAFeedGap()
+    {
+        // Arrange: the feed pauses, so the cursor catches up and holds at the newest sample
+        var clock = new FakeClock { Utc = T0.AddSeconds(500) };
+        var smoother = new TrackPositionSmoother(clock);
+        smoother.Process(Batch(T0, 0, 0));
+        smoother.Process(Batch(T0.AddSeconds(1), 1000, 0));
+        smoother.TryGetSmoothed("44", out _);
+        clock.Utc = clock.Utc.AddSeconds(3);
+        smoother.TryGetSmoothed("44", out _);
+
+        // Act: the feed resumes at real time, one sample a second, drawn every 100ms
+        double lag = 0;
+        for (var second = 2; second < 40; second++)
+        {
+            smoother.Process(Batch(T0.AddSeconds(second), second * 1000, 0));
+            for (var frame = 0; frame < 10; frame++)
+            {
+                clock.Utc = clock.Utc.AddSeconds(0.1);
+                Assert.True(smoother.TryGetSmoothed("44", out var p));
+                lag = (second * 1000) - p.x;
+            }
+        }
+
+        // Assert: it has dropped back to about RenderDelay behind (1.5s, 1500 units at the end
+        // of each second's frames is 0.6s less), rather than staying pinned to the newest sample,
+        // where every late sample would stall it
+        Assert.InRange(lag, 500, 1500);
     }
 
     [Fact]

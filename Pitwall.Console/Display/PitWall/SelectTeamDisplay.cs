@@ -34,11 +34,33 @@ public sealed class SelectTeamDisplay(
         if (state.CursorOffset >= teams.Count)
             state.CursorOffset = teams.Count - 1;
 
+        // A blank row between teams when there's room (two rows go to the border), and full
+        // names when they fit
+        return Task.FromResult<IRenderable>(
+            new Responsive(
+                (width, height) =>
+                    new Panel(
+                        TeamTable(
+                            teams,
+                            spaced: height is null || height >= (teams.Count * 2) + 1,
+                            fullNames: width >= 100
+                        )
+                    )
+                    {
+                        Header = new PanelHeader("Select a team for the pit wall (▲/▼, Enter)"),
+                        Expand = true,
+                    }
+            )
+        );
+    }
+
+    private Table TeamTable(IReadOnlyList<PitWallTeam> teams, bool spaced, bool fullNames)
+    {
         var table = new Table().NoBorder().NoSafeBorder().HideHeaders();
         table.AddColumns(
             new TableColumn("") { Width = 2 },
-            new TableColumn("Team") { Width = 26 },
-            new TableColumn("Cars")
+            new TableColumn("Team") { Width = 22, NoWrap = true },
+            new TableColumn("Cars") { NoWrap = true }
         );
 
         for (var i = 0; i < teams.Count; i++)
@@ -53,7 +75,10 @@ public sealed class SelectTeamDisplay(
                 {
                     var driver = context.Driver(number);
                     var line = timingData.Latest.Lines.GetValueOrDefault(number);
-                    return $"P{line?.Line, -2} [bold]{driver.RacingNumber, 2} {driver.Tla}[/] [grey]{Markup.Escape(driver.FullName ?? "")}[/]";
+                    var fullName = fullNames
+                        ? $" [grey]{Markup.Escape(driver.FullName ?? ""),-22}[/]"
+                        : "";
+                    return $"[grey]P{line?.Line, -2}[/] [bold]{driver.RacingNumber, 2} {driver.Tla}[/]{fullName}";
                 })
             );
 
@@ -62,15 +87,9 @@ public sealed class SelectTeamDisplay(
                 new Markup(selected ? $"[black on #{hex}] {name} [/]" : $"[bold #{hex}] {name}[/]"),
                 new Markup(cars)
             );
-            table.AddEmptyRow();
+            if (spaced && i < teams.Count - 1)
+                table.AddEmptyRow();
         }
-
-        return Task.FromResult<IRenderable>(
-            new Panel(table)
-            {
-                Header = new PanelHeader("Select a team for the pit wall (▲/▼, Enter)"),
-                Expand = true,
-            }
-        );
+        return table;
     }
 }

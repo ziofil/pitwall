@@ -1,9 +1,16 @@
+using System.Globalization;
 using Pitwall.Data;
 
 namespace Pitwall.Console;
 
+/// <summary>
+/// D opens a box to type the stream delay into, so the pit wall can be matched to a TV
+/// broadcast exactly.
+/// </summary>
 public class DelayInputHandler(IDateTimeProvider dateTimeProvider, State state) : IInputHandler
 {
+    public const string Title = "LIVE DELAY";
+
     public bool IsEnabled => !dateTimeProvider.IsPaused;
 
     public Screen[] ApplicableScreens =>
@@ -13,14 +20,10 @@ public class DelayInputHandler(IDateTimeProvider dateTimeProvider, State state) 
             Screen.PitWallTelemetry,
             Screen.PitWallTrackMap,
             Screen.PitWallComms,
+            Screen.PitWallWeather,
         ];
 
-    public ConsoleKey[] DisplayKeys => [ConsoleKey.N, ConsoleKey.M];
-
-    // PrintScreen keycode = 44 (actually comma)
-    // Delete keycode = 46 (actually period)
-    public ConsoleKey[] Keys =>
-        [ConsoleKey.N, ConsoleKey.M, ConsoleKey.PrintScreen, ConsoleKey.Delete];
+    public ConsoleKey[] Keys => [ConsoleKey.D];
 
     public string Description => $"Delay {State.FormatDelay(dateTimeProvider.Delay)}";
 
@@ -31,39 +34,48 @@ public class DelayInputHandler(IDateTimeProvider dateTimeProvider, State state) 
         CancellationToken cancellationToken = default
     )
     {
-        switch (consoleKeyInfo.Key)
-        {
-            case ConsoleKey.N:
-                UpdateDelay(-1, consoleKeyInfo.Modifiers);
-                break;
-            case ConsoleKey.M:
-                UpdateDelay(1, consoleKeyInfo.Modifiers);
-                break;
-            case ConsoleKey.PrintScreen:
-                UpdateDelay(-1, ConsoleModifiers.Control);
-                break;
-            case ConsoleKey.Delete:
-                UpdateDelay(1, ConsoleModifiers.Control);
-                break;
-        }
-
+        state.TextInput = new TextInput(
+            $"{(long)dateTimeProvider.Delay.TotalMilliseconds}",
+            text =>
+            {
+                if (Parse(text) is not { } delay)
+                    return Task.FromResult<string?>(
+                        "Use ms (34600), seconds (34.6s) or m:ss (0:34.6)"
+                    );
+                dateTimeProvider.Delay = delay;
+                state.DelayChangedAt = DateTimeOffset.UtcNow;
+                return Task.FromResult<string?>(null);
+            },
+            Title
+        );
         return Task.CompletedTask;
     }
 
-    private void UpdateDelay(int direction, ConsoleModifiers modifiers)
+    /// <summary>
+    /// Reads a delay: milliseconds by default (<c>34600</c>), or seconds (<c>34.6s</c>), or
+    /// minutes and seconds (<c>0:34.6</c>). <c>null</c> if it isn't one of those or is negative.
+    /// </summary>
+    public static TimeSpan? Parse(string text)
     {
-        var amount = modifiers switch
-        {
-            ConsoleModifiers.Shift => 30 * direction,
-            ConsoleModifiers.Control => 1 * direction,
-            _ => 5 * direction,
-        };
-
-        dateTimeProvider.Delay += TimeSpan.FromSeconds(amount);
-
-        if (dateTimeProvider.Delay < TimeSpan.Zero)
-            dateTimeProvider.Delay = TimeSpan.Zero;
-
-        state.DelayChangedAt = DateTimeOffset.UtcNow;
+        text = text.Replace(" ", "").ToLowerInvariant();
+        TimeSpan? delay =
+            text.EndsWith("ms") && Number(text[..^2]) is { } ms ? TimeSpan.FromMilliseconds(ms)
+            : text.EndsWith('s') && Number(text[..^1]) is { } s ? TimeSpan.FromSeconds(s)
+            : text.Contains(':')
+            && TimeSpan.TryParseExact(
+                text,
+                [@"m\:ss", @"m\:ss\.FFF", @"h\:mm\:ss", @"h\:mm\:ss\.FFF"],
+                CultureInfo.InvariantCulture,
+                out var time
+            )
+                ? time
+            : Number(text) is { } plain ? TimeSpan.FromMilliseconds(plain)
+            : null;
+        return delay < TimeSpan.Zero ? null : delay;
     }
+
+    private static double? Number(string text) =>
+        double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var x)
+            ? x
+            : null;
 }

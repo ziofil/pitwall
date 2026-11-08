@@ -19,6 +19,8 @@ public static partial class ServiceCollectionExtensions
         services.AddSingleton<Graphics.ITerminalImages, Graphics.TerminalImages>();
         services.AddSingleton<PitWallComponents>();
         services.AddSingleton<StartSimulatedSessionOptions>();
+        services.AddSingleton<RainRadar>();
+        services.AddSingleton<RainForecast>();
 
         return services;
     }

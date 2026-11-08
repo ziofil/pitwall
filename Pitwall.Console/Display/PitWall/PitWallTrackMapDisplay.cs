@@ -129,7 +129,7 @@ public sealed class PitWallTrackMapDisplay(
                     context.IsTeamCar(car.Number)
                 ))
                 .ToList(),
-            InnerText(cars.Count)
+            InnerText(cars.Count, messages: 4)
                 .Select(x =>
                     (
                         x.Text,
@@ -162,38 +162,25 @@ public sealed class PitWallTrackMapDisplay(
     {
         var focus = FocusCars();
         var teamColour = PitWallTheme.TeamColour(context.Team?.Colour);
+        var distances = DistancesAlong(circuit);
         var cars = new List<CarOnTrack>();
         foreach (var (number, entry) in entries)
         {
-            if (entry.X is not { } x || entry.Y is not { } y)
+            if (entry.X is not { } rawX || entry.Y is not { } rawY)
                 continue;
+            (double X, double Y) position = (rawX, rawY);
             if (
                 options.Value.EnablePositionSmoothing
                 && positionSmoother.TryGetSmoothed(number, out var smoothed)
             )
             {
-                (x, y) = ((int)Math.Round(smoothed.x), (int)Math.Round(smoothed.y));
+                position = smoothed;
             }
             var line = timingData.Latest.Lines.GetValueOrDefault(number);
             // Skip the safety car and medical car, which are in the position feed but aren't
             // racing, and cars out of the race, which stay in the feed where they parked
             if (line is null || line.Retired == true || line.Stopped == true)
                 continue;
-
-            // Progress around the lap is the index of the nearest point on the circuit outline
-            var nearest = 0;
-            var nearestDistance = long.MaxValue;
-            for (var i = 0; i < circuit.Count; i++)
-            {
-                long dx = circuit[i].x - x;
-                long dy = circuit[i].y - y;
-                var distance = (dx * dx) + (dy * dy);
-                if (distance < nearestDistance)
-                {
-                    nearestDistance = distance;
-                    nearest = i;
-                }
-            }
 
             var colour =
                 context.IsTeamCar(number) ? teamColour
@@ -207,15 +194,76 @@ public sealed class PitWallTrackMapDisplay(
                 new CarOnTrack(
                     number,
                     context.Driver(number).Tla ?? number,
-                    nearest / (double)circuit.Count,
-                    x,
-                    y,
+                    LapProgress(circuit, distances, position),
+                    (int)Math.Round(position.X),
+                    (int)Math.Round(position.Y),
                     colour,
                     focus.Contains(number)
                 )
             );
         }
         return cars;
+    }
+
+    private List<(int x, int y)>? _distancesCircuit;
+    private double[] _distances = [];
+
+    /// <summary>
+    /// How far along the outline each of its points is, closing the loop back to the first
+    /// point; kept while the circuit stays the same.
+    /// </summary>
+    private double[] DistancesAlong(List<(int x, int y)> circuit)
+    {
+        if (ReferenceEquals(circuit, _distancesCircuit))
+            return _distances;
+        var distances = new double[circuit.Count + 1];
+        for (var i = 1; i <= circuit.Count; i++)
+        {
+            var (from, to) = (circuit[i - 1], circuit[i % circuit.Count]);
+            distances[i] =
+                distances[i - 1]
+                + Math.Sqrt(Math.Pow(to.x - from.x, 2) + Math.Pow(to.y - from.y, 2));
+        }
+        (_distancesCircuit, _distances) = (circuit, distances);
+        return distances;
+    }
+
+    /// <summary>
+    /// How far around the lap a position is, from 0 to 1: projected on to the nearest stretch of
+    /// the outline and measured by distance, so cars move smoothly rather than stepping from one
+    /// outline point to the next.
+    /// </summary>
+    internal static double LapProgress(
+        List<(int x, int y)> circuit,
+        double[] distances,
+        (double X, double Y) position
+    )
+    {
+        var best = double.MaxValue;
+        var along = 0.0;
+        for (var i = 0; i < circuit.Count; i++)
+        {
+            var (from, to) = (circuit[i], circuit[(i + 1) % circuit.Count]);
+            var (dx, dy) = ((double)to.x - from.x, (double)to.y - from.y);
+            var lengthSquared = (dx * dx) + (dy * dy);
+            var t =
+                lengthSquared == 0
+                    ? 0
+                    : Math.Clamp(
+                        (((position.X - from.x) * dx) + ((position.Y - from.y) * dy))
+                            / lengthSquared,
+                        0,
+                        1
+                    );
+            var (px, py) = (from.x + (t * dx) - position.X, from.y + (t * dy) - position.Y);
+            var distance = (px * px) + (py * py);
+            if (distance < best)
+            {
+                best = distance;
+                along = distances[i] + (t * (distances[i + 1] - distances[i]));
+            }
+        }
+        return along / distances[^1] % 1;
     }
 
     /// <summary>The team's cars and the cars directly ahead of and behind them.</summary>
@@ -311,14 +359,15 @@ public sealed class PitWallTrackMapDisplay(
         }
 
         // Inside the ring: latest race control messages, cars on track, clocks
-        var inner = InnerText(cars.Count);
-        var firstRow = (centreY / 4) - (inner.Count / 2);
         var maxWidth = Math.Max(10, (int)(radius * 1.3 / 2));
+        // A small ring has room for the clocks only: messages that short can't be read
+        var inner = InnerText(cars.Count, messages: maxWidth >= 24 ? 4 : 0);
+        var firstRow = (centreY / 4) - (inner.Count / 2);
         for (var i = 0; i < inner.Count; i++)
         {
             var (text, style) = inner[i];
             if (text.Length > maxWidth)
-                text = text[..maxWidth];
+                text = text[..(maxWidth - 1)].TrimEnd() + "…";
             canvas.Label((centreX / 2) - (text.Length / 2), firstRow + i, text, style);
         }
         canvas.Label(
@@ -329,31 +378,30 @@ public sealed class PitWallTrackMapDisplay(
         );
     }
 
-    private List<(string Text, Style Style)> InnerText(int carsOnTrack)
+    private List<(string Text, Style Style)> InnerText(int carsOnTrack, int messages)
     {
         var lines = new List<(string, Style)>();
         foreach (
             var message in raceControl
                 .Latest.Messages.Values.OrderByDescending(x => x.Utc)
-                .Take(4)
+                .Take(messages)
                 .Reverse()
         )
         {
             var text = message.Message?.ToUpperInvariant() ?? "";
             lines.Add((text, PitWallCommsDisplay.MessageStyle(message)));
         }
-        lines.Add(("", Style.Plain));
-        lines.Add(($"ON TRACK: {carsOnTrack}", PitWallTheme.Normal));
+        if (lines.Count > 0)
+            lines.Add(("", Style.Plain));
+        lines.Add(($"ON TRACK {carsOnTrack}", PitWallTheme.Normal));
 
         var localOffset = string.IsNullOrWhiteSpace(sessionInfo.Latest.GmtOffset)
             ? TimeSpan.Zero
             : TimeSpan.Parse(sessionInfo.Latest.GmtOffset);
         var now = dateTimeProvider.Utc.ToOffset(localOffset);
+        lines.Add(($@"NOW {now:HH\:mm\:ss}", PitWallTheme.Normal));
         lines.Add(
-            (
-                $@"NOW: {now:HH\:mm\:ss}  END: {extrapolatedClock.ExtrapolatedRemaining():h\:mm\:ss}",
-                PitWallTheme.Normal
-            )
+            ($@"REM {extrapolatedClock.ExtrapolatedRemaining():h\:mm\:ss}", PitWallTheme.Normal)
         );
         return lines;
     }

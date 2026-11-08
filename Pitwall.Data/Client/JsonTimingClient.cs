@@ -91,7 +91,11 @@ public class JsonTimingClient(
         }
     }
 
-    public async Task LoadSimulationDataAsync(string directory, CancellationToken cancellationToken)
+    public async Task LoadSimulationDataAsync(
+        string directory,
+        DateTimeOffset? startAt,
+        CancellationToken cancellationToken
+    )
     {
         await Task.Yield();
 
@@ -107,7 +111,9 @@ public class JsonTimingClient(
 
             timingService.ProcessSubscriptionData(subscriptionData);
 
-            dateTimeProvider.Delay = CalculateDelay(subscriptionData);
+            dateTimeProvider.Delay = startAt is { } start
+                ? DateTimeOffset.UtcNow - start
+                : CalculateDelay(subscriptionData);
 
             // Handle the real-time data
             var liveFilePath = GetLiveFilePath(directory);

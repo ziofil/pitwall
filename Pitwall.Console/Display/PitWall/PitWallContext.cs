@@ -28,8 +28,21 @@ public sealed class PitWallContext(
             .OrderBy(team => team.DriverNumbers.Select(Position).DefaultIfEmpty(99).Min())
             .ToList();
 
-    /// <summary>The selected team, or <c>null</c> if none is selected or it isn't in this session.</summary>
-    public PitWallTeam? Team => Teams.FirstOrDefault(x => x.Name == state.SelectedTeam);
+    /// <summary>
+    /// The selected team. With none chosen yet, the first team in the list is chosen (and kept,
+    /// so it doesn't change as the order does); <c>null</c> only before the session's teams are
+    /// known, or if the chosen team isn't in this session.
+    /// </summary>
+    public PitWallTeam? Team
+    {
+        get
+        {
+            var teams = Teams;
+            if (state.SelectedTeam is null && teams.Count > 0)
+                state.SelectedTeam = teams[0].Name;
+            return teams.FirstOrDefault(x => x.Name == state.SelectedTeam);
+        }
+    }
 
     public bool IsTeamCar(string driverNumber) =>
         Team?.DriverNumbers.Contains(driverNumber) ?? false;

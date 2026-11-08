@@ -31,25 +31,15 @@ public sealed class TrackPositionSmoother(IDateTimeProvider dateTimeProvider)
 
     private readonly ConcurrentDictionary<string, DriverState> _drivers = new();
 
-    // The wall clock and feed time differ by a variable delivery delay, so we don't map between
-    // them: the render cursor (the feed time we draw at) just advances with real elapsed time, held
-    // RenderDelay behind the newest sample and clamped so it never overruns the feed or runs back.
-    private long _newestFeedTicks;
-    private DateTimeOffset _cursor;
-    private DateTimeOffset _lastWall;
-    private bool _cursorSet;
+    private readonly RenderCursor _cursor = new(dateTimeProvider, RenderDelay, MaxLag);
 
     public PositionDataPoint Latest { get; private set; } = new();
 
     public void Process(PositionDataPoint data)
     {
         Latest = data;
-        var newest = new DateTimeOffset(_newestFeedTicks, TimeSpan.Zero);
         foreach (var batch in data.Position)
         {
-            if (batch.Timestamp > newest)
-                newest = batch.Timestamp;
-
             foreach (var (driverNumber, entry) in batch.Entries)
             {
                 if (!entry.X.HasValue || !entry.Y.HasValue)
@@ -73,18 +63,14 @@ public sealed class TrackPositionSmoother(IDateTimeProvider dateTimeProvider)
             }
         }
 
-        Volatile.Write(ref _newestFeedTicks, newest.UtcTicks);
+        if (data.Position.Count > 0)
+            _cursor.Observe(data.Position.Max(x => x.Timestamp));
     }
 
     public bool TryGetSmoothed(string driverNumber, out (double x, double y) point)
     {
         point = default;
-        var newestTicks = Volatile.Read(ref _newestFeedTicks);
-        if (
-            newestTicks == 0
-            || !_drivers.TryGetValue(driverNumber, out var state)
-            || state.OffTrack
-        )
+        if (!_drivers.TryGetValue(driverNumber, out var state) || state.OffTrack)
             return false;
 
         (DateTimeOffset Time, int X, int Y)[] hist;
@@ -93,31 +79,10 @@ public sealed class TrackPositionSmoother(IDateTimeProvider dateTimeProvider)
         if (hist.Length == 0)
             return false;
 
-        point = FitPoint(hist, AdvanceCursor(new DateTimeOffset(newestTicks, TimeSpan.Zero)));
+        if (_cursor.Advance() is not { } at)
+            return false;
+        point = FitPoint(hist, at);
         return true;
-    }
-
-    // Advances the shared cursor by the time elapsed since the last frame. Called once per drawn
-    // car, but only the frame's first call sees elapsed time, so every car renders the same instant.
-    private DateTimeOffset AdvanceCursor(DateTimeOffset newest)
-    {
-        var now = dateTimeProvider.Utc;
-        if (!_cursorSet)
-        {
-            _cursor = newest - RenderDelay;
-            _cursorSet = true;
-        }
-        else
-        {
-            if (now > _lastWall)
-                _cursor += now - _lastWall;
-            if (_cursor > newest)
-                _cursor = newest;
-            else if (_cursor < newest - MaxLag)
-                _cursor = newest - RenderDelay;
-        }
-        _lastWall = now;
-        return _cursor;
     }
 
     // Fits a line (in x and y) to the SmoothingPoints samples nearest target. Time is measured

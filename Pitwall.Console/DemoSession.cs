@@ -12,6 +12,12 @@ public static class DemoSession
     public const string Name = "2026 Mexico City Grand Prix";
 
     private const string Folder = "2026_Mexico_City_Race";
+
+    /// <summary>
+    /// Where the demo starts: the recording's timing data begins at 20:42:11, but car telemetry
+    /// and positions only from 20:43:28, so start just after that rather than with empty pages.
+    /// </summary>
+    public static readonly DateTimeOffset StartAt = new(2026, 11, 1, 20, 43, 30, TimeSpan.Zero);
     private static readonly string[] Files = ["subscribe.json", "live.jsonl"];
 
     /// <summary>

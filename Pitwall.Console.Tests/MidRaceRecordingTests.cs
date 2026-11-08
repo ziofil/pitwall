@@ -35,6 +35,46 @@ public class MidRaceRecordingTests(SampleMexicoFixture fixture) : IClassFixture<
     }
 
     [Fact]
+    public void RaceTraceShowsTheSafetyCarsAndRedFlag()
+    {
+        var display = fixture.Services.GetRequiredService<PitWallStrategyDisplay>();
+
+        var bands = display.NeutralisedPeriods(56);
+
+        // The safety car from lap 44, then the red flag on lap 45 until the standing restart
+        Assert.Contains(bands, x => x.Label == "SC" && x.FromLap == 43 && x.ToLap == 44);
+        Assert.Contains(bands, x => x.Label == "RED FLAG" && x.FromLap == 44 && x.ToLap == 46);
+    }
+
+    [Fact]
+    public async Task RaceTraceImageMarksStopsAndNeutralisedPeriods()
+    {
+        var terminal = fixture.Services.GetRequiredService<NoTerminalImages>();
+        var state = fixture.Services.GetRequiredService<State>();
+        state.SelectedTeam = "Red Bull Racing";
+        var display = fixture.Services.GetRequiredService<PitWallStrategyDisplay>();
+        state.CurrentScreen = display.Screen;
+        try
+        {
+            terminal.Supported = true;
+            await display.GetContentAsync();
+            Assert.NotNull(terminal.LastImage);
+            Assert.NotEmpty(display.PitStopsByCar());
+
+            var directory = Path.Join(AppContext.BaseDirectory, "renders");
+            Directory.CreateDirectory(directory);
+            await File.WriteAllBytesAsync(
+                Path.Join(directory, "RaceTrace-Mexico.png"),
+                terminal.LastImage
+            );
+        }
+        finally
+        {
+            terminal.Supported = false;
+        }
+    }
+
+    [Fact]
     public void SmoothedGapsMatchTheFeedAfterTheRedFlag()
     {
         var timing = fixture.Services.GetRequiredService<TimingDataProcessor>();
@@ -52,6 +92,45 @@ public class MidRaceRecordingTests(SampleMexicoFixture fixture) : IClassFixture<
             var smoothed = smoother.GapToLeader(number);
             Assert.NotNull(smoothed);
             Assert.InRange(smoothed!.Value, (double)raw - 1.5, (double)raw + 1.5);
+        }
+    }
+}
+
+/// <summary>The Mexico recording just after it starts, before any lap has been completed.</summary>
+public sealed class SampleMexicoStartFixture() : SampleSessionFixture("2026_Mexico_City_Race", 0);
+
+public class RecordingStartTests(SampleMexicoStartFixture fixture)
+    : IClassFixture<SampleMexicoStartFixture>
+{
+    [Fact]
+    public void WithNoTeamChosenTheFirstTeamIsShown()
+    {
+        var state = fixture.Services.GetRequiredService<State>();
+        var context = fixture.Services.GetRequiredService<PitWallContext>();
+        state.SelectedTeam = null;
+
+        Assert.Equal(context.Teams[0].Name, context.Team?.Name);
+        // Kept once chosen, so the team doesn't change when the order does
+        Assert.Equal(context.Teams[0].Name, state.SelectedTeam);
+    }
+
+    [Fact]
+    public async Task StrategyPageWaitsForLapsInsteadOfFailing()
+    {
+        var state = fixture.Services.GetRequiredService<State>();
+        state.SelectedTeam = "Ferrari";
+        var terminal = fixture.Services.GetRequiredService<NoTerminalImages>();
+        terminal.Supported = true;
+        try
+        {
+            var display = fixture.Services.GetRequiredService<PitWallStrategyDisplay>();
+            Assert.Empty(display.RaceTrace());
+            var text = await fixture.RenderAsync(display);
+            Assert.Contains("WAITING FOR COMPLETED LAPS", text);
+        }
+        finally
+        {
+            terminal.Supported = false;
         }
     }
 }

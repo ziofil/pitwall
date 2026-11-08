@@ -46,10 +46,8 @@ public class StartSimulatedSessionInputHandler(
                 _ = jsonTimingClient.LoadSimulationDataAsync(
                     selected.ElementAt(state.CursorOffset).Directory
                 );
-                // Go straight to the pit wall, asking for a team first if none is chosen yet
-                state.CurrentScreen = state.SelectedTeam is null
-                    ? Screen.SelectTeam
-                    : Screen.PitWallTiming;
+                // Go straight to the pit wall: the first team is shown until another is picked
+                state.CurrentScreen = Screen.PitWallTiming;
                 state.CursorOffset = 0;
             }
         }

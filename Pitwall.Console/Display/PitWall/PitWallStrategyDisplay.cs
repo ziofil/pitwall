@@ -19,8 +19,10 @@ public sealed class PitWallStrategyDisplay(
     TimingSmoother smoother,
     SessionInfoProcessor sessionInfo,
     TrackStatusProcessor trackStatus,
+    RaceControlMessageProcessor raceControl,
     PitStopSeriesProcessor pitStops,
     PitLaneTimeCollectionProcessor pitLaneTimes,
+    LapCountProcessor lapCount,
     ITerminalImages images
 ) : IDisplay
 {
@@ -86,6 +88,24 @@ public sealed class PitWallStrategyDisplay(
                 + $"[bold]{UndercutRangeSeconds:0.0}s[/]"
         );
 
+        if (!sessionInfo.Latest.IsRace())
+        {
+            _image.Clear();
+            return Task.FromResult(
+                components.Page(
+                    Screen,
+                    new Layout("Strategy").SplitRows(
+                        new Layout("Cars", cars).Size(RowsBelowTrace - 1),
+                        new Layout("Notes", notes).Size(1),
+                        new Layout(
+                            "Trace",
+                            new Text(" The race trace is drawn in races.", PitWallTheme.Dim)
+                        )
+                    )
+                )
+            );
+        }
+
         var body = new Layout("Strategy").SplitRows(
             new Layout("Trace", RaceTracePanel(team)),
             // Nine rows of detail per car, plus the panel border
@@ -98,25 +118,27 @@ public sealed class PitWallStrategyDisplay(
 
     private IRenderable RaceTracePanel(PitWallTeam team)
     {
-        if (!sessionInfo.Latest.IsRace())
-        {
-            _image.Clear();
-            return new Panel(new Text("RACE TRACE IS ONLY AVAILABLE IN RACES", PitWallTheme.Dim))
-            {
-                Header = new PanelHeader("[bold] RACE TRACE [/]"),
-                Expand = true,
-                BorderStyle = new Style(foreground: PitWallTheme.Grid),
-            };
-        }
-
         var traces = RaceTrace();
         var focus = FocusCars(team);
 
         IRenderable chart;
-        if (_image.Supported)
+        if (traces.Count == 0)
+        {
+            // Too early in the data for a trace (e.g. a recording joined mid-race, just started)
+            _image.Clear();
+            chart = new Text(" WAITING FOR COMPLETED LAPS", PitWallTheme.Dim);
+        }
+        else if (_image.Supported)
         {
             // Drawn as an image inside the panel's border, see PostContentDrawAsync
             var (columns, rows) = _image.WindowCells;
+            // Each team's second car (by racing number) is dashed, as both share a colour
+            var secondCars = traces
+                .Keys.GroupBy(x => context.Driver(x).TeamName ?? x)
+                .SelectMany(x => x.OrderBy(n => int.TryParse(n, out var i) ? i : 0).Skip(1))
+                .ToHashSet();
+            var stops = PitStopsByCar();
+            var bands = NeutralisedPeriods(traces.Values.Max(x => x[^1].Lap));
             var lines = traces
                 .Select(x => new TraceLine(
                     context.Driver(x.Key).Tla ?? x.Key,
@@ -125,7 +147,9 @@ public sealed class PitWallStrategyDisplay(
                     context.IsTeamCar(x.Key) ? 2
                         : focus.Contains(x.Key) ? 1
                         : 0,
-                    x.Value
+                    x.Value,
+                    secondCars.Contains(x.Key),
+                    stops.GetValueOrDefault(x.Key)
                 ))
                 .ToList();
             _image.Update(
@@ -133,7 +157,7 @@ public sealed class PitWallStrategyDisplay(
                 1,
                 columns - 2,
                 rows - PitWallComponents.BodyRowsOffset - RowsBelowTrace - 2,
-                (width, height) => ChartRenderers.RaceTrace(lines, width, height)
+                (width, height) => ChartRenderers.RaceTrace(lines, bands, lapCount.Latest?.TotalLaps, width, height)
             );
             chart = new Text("");
         }
@@ -148,7 +172,7 @@ public sealed class PitWallStrategyDisplay(
         return new Panel(chart)
         {
             Header = new PanelHeader(
-                "[bold] RACE TRACE [/][grey]seconds ahead of the leader's average pace · team cars and nearest rivals highlighted [/]"
+                "[bold] RACE TRACE [/][grey]seconds ahead of a car lapping at the field's median pace · team cars and nearest rivals highlighted · dots are stops in the new tyre's colour [/]"
             ),
             Expand = true,
             Padding = new Padding(0),
@@ -157,14 +181,19 @@ public sealed class PitWallStrategyDisplay(
     }
 
     /// <summary>
-    /// For each car, (lap, seconds ahead of a car running at the reference pace).
+    /// For each car, (lap, seconds ahead of a car lapping at the field's median pace), at the end
+    /// of each lap and, where sector times allow, at each sector boundary in between.
     /// <para>
     /// The time the race leader crossed the line at the end of each lap is built up lap by lap:
     /// the leader's lap time, plus its gap to whoever led the lap before (zero if it was leading
     /// already). Each car's time is then the leader's time plus its gap to the leader. Gaps are
     /// in every lap's snapshot, so this works from whatever lap the data starts at (e.g. a
-    /// recording joined mid-race) and copes with changes of leader. The reference pace is the
-    /// leader's average lap, so the leader ends near zero.
+    /// recording joined mid-race) and copes with changes of leader.
+    /// </para>
+    /// <para>
+    /// The reference adds up each lap's median lap time, so a safety car or rain slows it along
+    /// with the field, instead of bending every line at once as a constant pace would. Sector
+    /// points put a pit stop's time loss where it happened, so stops show as sharp drops.
     /// </para>
     /// </summary>
     internal Dictionary<string, List<(double Lap, double Delta)>> RaceTrace()
@@ -184,9 +213,23 @@ public sealed class PitWallStrategyDisplay(
                 .Where(x => x > 0)
         );
 
-        // When the leader crossed the line at the end of each lap, from the first lap we have,
-        // and the laps the race was stopped on, where gaps don't mean anything
+        // Each lap's laps not through the pits, for the reference pace
+        var cleanLaps = laps.ToDictionary(
+            lap => lap,
+            lap =>
+                timingData
+                    .DriversByLap[lap]
+                    .Values.Where(x => !x.IsPitLap)
+                    .Select(x => x.LastLapTime?.ToTimeSpan()?.TotalSeconds ?? 0)
+                    .Where(x => x > 0)
+                    .ToList()
+        );
+
+        // When the leader crossed the line at the end of each lap, and the reference car, from
+        // the first lap we have; and the laps the race was stopped on, where gaps mean nothing
         var leaderTime = new Dictionary<int, double> { [laps[0]] = 0 };
+        var reference = new Dictionary<int, double> { [laps[0]] = 0 };
+        var sectorFractions = new Dictionary<int, (double S1, double S2)>();
         var stoppedLaps = new HashSet<int>();
         for (var i = 1; i < laps.Count; i++)
         {
@@ -199,6 +242,29 @@ public sealed class PitWallStrategyDisplay(
                 ? null
                 : (double?)timingData.DriversByLap[previousLap].SmartGapToLeaderSeconds(leader.Key);
 
+            // The field's median lap, leaving out laps through the pits. When most of the field
+            // pits on the same lap, the few left racing are no reference on their own, so it's
+            // pooled with the laps either side
+            var clean = cleanLaps[lap];
+            var medianLap = RaceStrategy.Median(
+                clean.Count >= Math.Max(5, lines.Count / 2)
+                    ? clean
+                    : Enumerable
+                        .Range(lap - 2, 5)
+                        .SelectMany(x => cleanLaps.GetValueOrDefault(x) ?? [])
+                        .Where(x => x < typicalLap * 1.5)
+            );
+
+            // Where the sector boundaries fall in this lap, from its median sectors
+            var racing = lines.Values.Where(x => !x.IsPitLap).ToList();
+            double MedianSector(string sector) =>
+                RaceStrategy.Median(
+                    racing.Select(x => SectorSeconds(x, sector) ?? 0).Where(x => x > 0)
+                );
+            var (s1, s2, s3) = (MedianSector("0"), MedianSector("1"), MedianSector("2"));
+            if (s1 > 0 && s2 > 0 && s3 > 0)
+                sectorFractions[lap] = (s1 / (s1 + s2 + s3), (s1 + s2) / (s1 + s2 + s3));
+
             if (lap == previousLap + 1 && lapTime is > 0)
             {
                 // A lap that includes a red flag stoppage counts as a normal lap: race traces
@@ -208,38 +274,154 @@ public sealed class PitWallStrategyDisplay(
                     stoppedLaps.Add(lap);
                 var counted = stopped ? typicalLap : lapTime.Value;
                 leaderTime[lap] = leaderTime[previousLap] + (previousGap ?? 0) + counted;
+                reference[lap] =
+                    reference[previousLap] + (stopped || medianLap <= 0 ? counted : medianLap);
             }
             else
             {
                 // A gap in the data: carry on with a typical lap time for the missing laps
-                var typical = RaceStrategy.Median(
-                    lines
-                        .Values.Select(x => x.LastLapTime?.ToTimeSpan()?.TotalSeconds ?? 0)
-                        .Where(x => x > 0)
-                );
+                var typical = medianLap > 0 ? medianLap : typicalLap;
                 leaderTime[lap] = leaderTime[previousLap] + (typical * (lap - previousLap));
+                reference[lap] = reference[previousLap] + (typical * (lap - previousLap));
             }
         }
-
-        var first = laps[0];
-        var last = laps[^1];
-        var reference = (leaderTime[last] - leaderTime[first]) / (last - first);
 
         var traces = new Dictionary<string, List<(double Lap, double Delta)>>();
         foreach (var lap in laps.Where(x => !stoppedLaps.Contains(x)))
         {
             var lines = timingData.DriversByLap[lap];
-            foreach (var number in lines.Keys)
+            foreach (var (number, line) in lines)
             {
                 if (lines.SmartGapToLeaderSeconds(number) is not { } gap)
                     continue;
                 var time = leaderTime[lap] + (double)gap;
                 var series = traces.GetValueOrDefault(number) ?? (traces[number] = []);
-                series.Add((lap, ((lap - first) * reference) - time));
+
+                // The sector boundaries of this lap, counted on from the end of the car's
+                // previous lap, if that's in the trace and the sectors fit inside this lap
+                if (
+                    series.Count > 0
+                    && series[^1].Lap == lap - 1
+                    && sectorFractions.TryGetValue(lap, out var fractions)
+                    && SectorSeconds(line, "0") is { } carS1
+                    && SectorSeconds(line, "1") is { } carS2
+                )
+                {
+                    var previousTime = reference[lap - 1] - series[^1].Delta;
+                    if (previousTime + carS1 + carS2 < time)
+                    {
+                        double Reference(double fraction) =>
+                            reference[lap - 1] + (fraction * (reference[lap] - reference[lap - 1]));
+                        series.Add(
+                            (
+                                lap - 1 + fractions.S1,
+                                Reference(fractions.S1) - (previousTime + carS1)
+                            )
+                        );
+                        series.Add(
+                            (
+                                lap - 1 + fractions.S2,
+                                Reference(fractions.S2) - (previousTime + carS1 + carS2)
+                            )
+                        );
+                    }
+                }
+                series.Add((lap, reference[lap] - time));
             }
         }
 
         return traces.Where(x => x.Value.Count > 1).ToDictionary(x => x.Key, x => x.Value);
+    }
+
+    private static double? SectorSeconds(TimingDataPoint.Driver line, string sector) =>
+        double.TryParse(
+            line.Sectors.GetValueOrDefault(sector)?.Value,
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var seconds
+        )
+            ? seconds
+            : null;
+
+    /// <summary>
+    /// Each car's pit stops: the lap its stop count went up on, and the tyre it was fitted with.
+    /// </summary>
+    internal Dictionary<string, List<TraceStop>> PitStopsByCar()
+    {
+        var stops = new Dictionary<string, List<TraceStop>>();
+        var previous = new Dictionary<string, int>();
+        foreach (var (lap, lines) in timingData.DriversByLap.OrderBy(x => x.Key))
+        {
+            foreach (var (number, line) in lines)
+            {
+                if (line.NumberOfPitStops is not { } count)
+                    continue;
+                if (previous.TryGetValue(number, out var before) && count > before)
+                {
+                    var compound = timingAppData
+                        .Latest.Lines.GetValueOrDefault(number)
+                        ?.Stints.GetValueOrDefault($"{count}")
+                        ?.Compound;
+                    (stops.GetValueOrDefault(number) ?? (stops[number] = [])).Add(
+                        new TraceStop(lap, compound)
+                    );
+                }
+                previous[number] = count;
+            }
+        }
+        return stops;
+    }
+
+    /// <summary>
+    /// When the race was neutralised (safety car, virtual safety car, red flag), in trace laps:
+    /// lap <c>n</c> runs from <c>n - 1</c> to <c>n</c>. From race control's messages.
+    /// </summary>
+    internal List<TraceBand> NeutralisedPeriods(double lastLap)
+    {
+        var bands = new List<TraceBand>();
+        (string Label, int Lap)? open = null;
+        void Close(int lap)
+        {
+            if (open is { } period)
+                bands.Add(new TraceBand(period.Lap - 1, Math.Max(lap, period.Lap), period.Label));
+            open = null;
+        }
+
+        foreach (
+            var message in raceControl
+                .Latest.Messages.Values.Where(x => x.Lap is not null)
+                .OrderBy(x => x.Utc)
+        )
+        {
+            var text = message.Message?.ToUpperInvariant() ?? "";
+            var lap = message.Lap!.Value;
+            if (text.Contains("VIRTUAL SAFETY CAR DEPLOYED"))
+            {
+                Close(lap - 1);
+                open = ("VSC", lap);
+            }
+            else if (text.Contains("VIRTUAL SAFETY CAR ENDING") && open?.Label == "VSC")
+                Close(lap);
+            else if (text.Contains("SAFETY CAR DEPLOYED"))
+            {
+                Close(lap - 1);
+                open = ("SC", lap);
+            }
+            else if (text.Contains("SAFETY CAR IN THIS LAP") && open?.Label == "SC")
+                Close(lap);
+            else if (text.Contains("RED FLAG"))
+            {
+                Close(lap - 1);
+                open = ("RED FLAG", lap);
+            }
+            else if (
+                open?.Label == "RED FLAG"
+                && (text.Contains("STANDING START") || text.Contains("ROLLING START"))
+            )
+                Close(lap);
+        }
+        Close((int)Math.Ceiling(lastLap));
+        return bands;
     }
 
     /// <summary>The team's cars and the cars directly ahead of and behind each of them.</summary>
@@ -275,23 +457,44 @@ public sealed class PitWallStrategyDisplay(
         }
 
         const int labelColumns = 5;
-        var minLap = traces.Values.Min(x => x[0].Lap);
-        var maxLap = Math.Max(minLap + 5, traces.Values.Max(x => x[^1].Lap));
-        // Scale to the focus cars so the interesting part of the field fills the chart
+        // The whole race, from the start to the flag, as in the image version
+        const double minLap = 0;
+        var lastLap = traces.Values.Max(x => x[^1].Lap);
+        var maxLap = Math.Max(Math.Max(lapCount.Latest?.TotalLaps ?? 0, Math.Ceiling(lastLap)), 5);
+        // Scale to the whole field so every car is on the chart, leaving out the deepest dips
+        // (pit stops and red flags) so they don't squash everything else
         var focusValues = traces
-            .Where(x => focus.Contains(x.Key))
-            .SelectMany(x => x.Value.Select(p => p.Delta))
+            .Values.SelectMany(x => x.Select(p => p.Delta))
             .DefaultIfEmpty(0)
+            .Order()
             .ToList();
-        var maxY = Math.Max(5, Math.Ceiling(focusValues.Max() / 10) * 10 + 5);
-        var minY = Math.Floor(focusValues.Min() / 10) * 10 - 5;
+        var high = focusValues[^1];
+        var low = focusValues[(int)(focusValues.Count * 0.03)];
+        var rows = Math.Max(1, canvas.Rows - 1);
+        // A round step that keeps the seconds labels at least two rows apart
+        var step = new[] { 5.0, 10, 20, 50, 100, 200 }.FirstOrDefault(
+            x => (high - low + 10) / x <= rows / 2.0,
+            500
+        );
+        var maxY = Math.Max(step / 2, Math.Ceiling(high / step) * step + (step / 2));
+        var minY = Math.Floor(low / step) * step - (step / 2);
+        var yLabels = Enumerable
+            .Range(0, (int)((maxY - minY) / step) + 2)
+            .Select(i => (Math.Ceiling(minY / step) * step) + (i * step))
+            .Where(y => y <= maxY)
+            .ToList();
+        var gutter = yLabels.Max(y => $"{y:+0;-0;0}".Length) + 1;
 
-        // Leave space on the right for driver labels, and the bottom row for lap numbers
-        var plot = new BrailleCanvas(canvas.Columns - labelColumns, canvas.Rows - 1);
+        // Leave space on the left for the seconds, on the right for driver labels, and the
+        // bottom row for lap numbers
+        var plot = new BrailleCanvas(
+            Math.Max(1, canvas.Columns - labelColumns - gutter),
+            rows
+        );
         var rangeX = maxLap - minLap;
 
-        // Grid: every 10 seconds and every 5 laps
-        for (var y = Math.Ceiling(minY / 10) * 10; y <= maxY; y += 10)
+        // Grid: at each labelled second and every 5 laps
+        foreach (var y in yLabels)
         {
             var py = (int)Math.Round((1 - ((y - minY) / (maxY - minY))) * (plot.Height - 1));
             plot.HorizontalGuide(py, PitWallTheme.Grid);
@@ -319,19 +522,21 @@ public sealed class PitWallStrategyDisplay(
             plot.Plot(points, minLap, maxLap, minY, maxY, colour);
         }
 
-        CopyInto(canvas, plot);
+        CopyInto(canvas, plot, gutter * 2);
 
-        // Gap labels on the left edge of the grid lines
-        for (var y = Math.Ceiling(minY / 10) * 10; y <= maxY; y += 10)
+        // Seconds in the gutter, right-aligned against the plot
+        foreach (var y in yLabels)
         {
             var row = (int)Math.Round((1 - ((y - minY) / (maxY - minY))) * (plot.Height - 1)) / 4;
-            canvas.Label(0, row, $"{y:0}", PitWallTheme.Dim);
+            var text = $"{y:+0;-0;0}";
+            canvas.Label(gutter - 1 - text.Length, row, text, PitWallTheme.Dim);
         }
 
-        // Lap numbers along the bottom
-        for (var lap = (int)Math.Ceiling(minLap / 5) * 5; lap <= maxLap; lap += 5)
+        // Lap numbers along the bottom, every 5 laps or every 10 if they'd crowd
+        var lapStep = plot.Columns * 5 / rangeX < 5 ? 10 : 5;
+        for (var lap = (int)Math.Ceiling(minLap / lapStep) * lapStep; lap <= maxLap; lap += lapStep)
         {
-            var column = (int)Math.Round((lap - minLap) / rangeX * (plot.Width - 1)) / 2;
+            var column = gutter + ((int)Math.Round((lap - minLap) / rangeX * (plot.Width - 1)) / 2);
             canvas.Label(Math.Max(0, column - 1), canvas.Rows - 1, $"{lap}", PitWallTheme.Dim);
         }
 
@@ -349,8 +554,10 @@ public sealed class PitWallStrategyDisplay(
             var colour = context.IsTeamCar(number)
                 ? PitWallTheme.TeamColour(team.Colour)
                 : PitWallTheme.TeamColour(context.Driver(number).TeamColour);
+            // Just after the line ends, which is the right edge only by the end of the race
+            var endColumn = gutter + ((int)Math.Round(lastLap / rangeX * (plot.Width - 1)) / 2) + 1;
             canvas.Label(
-                plot.Columns,
+                Math.Min(endColumn, gutter + plot.Columns),
                 row,
                 $" {context.Driver(number).Tla}",
                 new Style(foreground: colour, decoration: Decoration.Bold)
@@ -358,7 +565,7 @@ public sealed class PitWallStrategyDisplay(
         }
     }
 
-    private static void CopyInto(BrailleCanvas target, BrailleCanvas source)
+    private static void CopyInto(BrailleCanvas target, BrailleCanvas source, int offsetX)
     {
         // Re-plots the source dots onto the larger target canvas, keeping colours
         for (var x = 0; x < source.Width; x++)
@@ -366,7 +573,7 @@ public sealed class PitWallStrategyDisplay(
             for (var y = 0; y < source.Height; y++)
             {
                 if (source.Get(x, y) is { } colour)
-                    target.Set(x, y, colour);
+                    target.Set(x + offsetX, y, colour);
             }
         }
     }
@@ -506,7 +713,7 @@ public sealed class PitWallStrategyDisplay(
             {
                 var style = PitWallTheme.TimeStyle(x.Line!.LastLapTime, improvedOnly: true);
                 var pit = x.Line.IsPitLap ? "[#ff3333]P[/]" : " ";
-                return $"[grey]{x.Lap}[/]{pit}[{style.ToMarkup()}]{x.Line.LastLapTime?.Value}[/]";
+                return $"[grey]{x.Lap}[/]{pit} [{style.ToMarkup()}]{x.Line.LastLapTime?.Value ?? "–"}[/]";
             });
         rows.Add(new SingleLine("[grey]LAPS  [/] " + string.Join(" ", recent)));
 
@@ -626,6 +833,8 @@ public sealed class PitWallStrategyDisplay(
         if (ahead is null || behind is null)
             return new SingleLine($"[grey]{label}–[/]");
         var history = RaceStrategy.GetGapHistory(timingData.DriversByLap, ahead, behind, 6);
+        if (history.Count == 0)
+            return new SingleLine($"[grey]{label}–[/]");
         var values = history.Select(x =>
             x.Gap is >= 0 and < UndercutRangeSeconds ? $"[#ff8c00]{x.Gap:0.0}[/]" : $"{x.Gap:0.0}"
         );

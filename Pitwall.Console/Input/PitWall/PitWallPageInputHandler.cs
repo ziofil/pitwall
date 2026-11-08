@@ -1,6 +1,6 @@
 namespace Pitwall.Console;
 
-/// <summary>Moves between the pit wall pages with the arrow keys, or jumps to one with 1–5.</summary>
+/// <summary>Moves between the pit wall pages with the arrow keys, or jumps to one with 1–6.</summary>
 public sealed class PitWallPageInputHandler(State state) : IInputHandler
 {
     private static readonly ConsoleKey[] NumberKeys =
@@ -10,6 +10,7 @@ public sealed class PitWallPageInputHandler(State state) : IInputHandler
         ConsoleKey.D3,
         ConsoleKey.D4,
         ConsoleKey.D5,
+        ConsoleKey.D6,
     ];
 
     public bool IsEnabled => true;

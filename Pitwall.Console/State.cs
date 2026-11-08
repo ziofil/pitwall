@@ -51,8 +51,11 @@ public record State
 /// Called with the text on Enter. Returns an error to show, keeping the box open, or
 /// <c>null</c> to close it.
 /// </param>
-public sealed class TextInput(string text, Func<string, Task<string?>> commit)
+/// <param name="title">What the box is for, for screens that draw boxes from several places.</param>
+public sealed class TextInput(string text, Func<string, Task<string?>> commit, string? title = null)
 {
+    public string? Title => title;
+
     public string Text { get; set; } = text;
 
     /// <summary>Why the last Enter was refused, if it was.</summary>

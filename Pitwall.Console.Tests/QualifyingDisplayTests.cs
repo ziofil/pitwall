@@ -34,7 +34,8 @@ public class QualifyingDisplayTests(SampleQualifyingFixture fixture)
     {
         var text = await RenderAsync<PitWallStrategyDisplay>();
 
-        Assert.Contains("ONLY AVAILABLE IN RACES", text);
+        Assert.Contains("The race trace is drawn in races", text);
+        Assert.DoesNotContain("RACE TRACE", text);
         Assert.Contains("NOR", text);
     }
 

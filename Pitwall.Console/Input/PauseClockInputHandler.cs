@@ -13,6 +13,7 @@ public class PauseClockInputHandler(IDateTimeProvider dateTimeProvider) : IInput
             Screen.PitWallTelemetry,
             Screen.PitWallTrackMap,
             Screen.PitWallComms,
+            Screen.PitWallWeather,
         ];
 
     public ConsoleKey[] Keys => [ConsoleKey.P];

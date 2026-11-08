@@ -191,7 +191,8 @@ public sealed partial class PitWallCommsDisplay(
 
         // A table, so long transcriptions wrap under their own column. The selected message is
         // shown in full, the others cut to about two lines.
-        var list = new Table().NoBorder().NoSafeBorder().HideHeaders().Expand();
+        // Not expanded: that would spread the spare width over the narrow columns too
+        var list = new Table().NoBorder().NoSafeBorder().HideHeaders();
         list.AddColumn(new TableColumn("") { Width = 1, Padding = new Padding(0, 0, 1, 0) });
         list.AddColumn(new TableColumn("") { Width = 8, Padding = new Padding(0, 0, 1, 0) });
         list.AddColumn(new TableColumn("") { Width = 3, Padding = new Padding(0, 0, 1, 0) });
@@ -219,7 +220,9 @@ public sealed partial class PitWallCommsDisplay(
                     ? "[olive]transcribing…[/]"
                     : transcriber.ModelAvailable && transcriber.Problem is null
                         ? "[grey]waiting to transcribe[/]"
-                        : "[grey]Enter to play[/]";
+                    // Without transcriptions, only the selected message says what to do
+                    : isSelected ? "[grey]Enter to play[/]"
+                    : "";
 
             list.AddRow(
                 new Markup(isSelected ? "[black on white]►[/]" : " "),

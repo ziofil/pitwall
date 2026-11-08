@@ -20,7 +20,8 @@ public sealed class MainMenu(
     TimingDataProcessor timingData,
     PitWallContext context,
     Formula1Account accountService,
-    ITranscriptionProvider transcriptionProvider
+    ITranscriptionProvider transcriptionProvider,
+    SessionSchedule schedule
 )
 {
     /// <summary>Whether a live or recorded session has started sending data.</summary>
@@ -38,8 +39,8 @@ public sealed class MainMenu(
                         "Open the pit wall",
                         context.Team is { } team
                             ? $"Back to the {team.Name} pit wall."
-                            : "Pick a team and follow its two cars.",
-                        () => Go(context.Team is null ? Screen.SelectTeam : Screen.PitWallTiming)
+                            : "Follow a team's two cars; ▲ ▼ change team.",
+                        () => Go(Screen.PitWallTiming)
                     )
                 );
                 items.Add(
@@ -55,19 +56,24 @@ public sealed class MainMenu(
             // second one would mix with it
             if (!SessionRunning)
             {
+                // Named after the session on now, from F1's schedule, once it's been fetched
+                var now = DateTimeOffset.UtcNow;
+                var live = schedule.Current(now);
+                var next = schedule.Next(now);
                 items.Add(
                     new(
-                        "Watch a live session",
-                        "Connect to the F1 live timing feed for the session happening now.",
+                        live is null
+                            ? "Watch a live session"
+                            : $"Watch {live.Location} {live.Name} live",
+                        live is not null ? "Connect to the F1 live timing feed for this session."
+                            : next is not null
+                                ? $"No session on now. Next: {next.Location} {next.Name}, {next.Start.ToLocalTime():ddd d MMM HH:mm} your time."
+                            : "Connect to the F1 live timing feed for the session happening now.",
                         async () =>
                         {
                             state.SessionStarted = true;
                             await liveTimingClient.StartAsync();
-                            await Go(
-                                state.SelectedTeam is null
-                                    ? Screen.SelectTeam
-                                    : Screen.PitWallTiming
-                            );
+                            await Go(Screen.PitWallTiming);
                         }
                     )
                 );
@@ -78,12 +84,11 @@ public sealed class MainMenu(
                         async () =>
                         {
                             state.SessionStarted = true;
-                            _ = jsonTimingClient.LoadSimulationDataAsync(DemoSession.Unpack());
-                            await Go(
-                                state.SelectedTeam is null
-                                    ? Screen.SelectTeam
-                                    : Screen.PitWallTiming
+                            _ = jsonTimingClient.LoadSimulationDataAsync(
+                                DemoSession.Unpack(),
+                                DemoSession.StartAt
                             );
+                            await Go(Screen.PitWallTiming);
                         }
                     )
                 );

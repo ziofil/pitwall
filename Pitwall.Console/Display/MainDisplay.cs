@@ -16,7 +16,6 @@ public class MainDisplay(
     public Screen Screen => Screen.Main;
 
     private Task<string?>? _fetchVersionTask = null;
-    private string _currentVersion = $"v{ThisAssembly.NuGetPackageVersion}";
 
     private static readonly string[] Logo =
     [
@@ -50,32 +49,72 @@ public class MainDisplay(
                 .Append(new Markup($"[grey]{Chequer(40)}[/]").Centered())
         );
 
+        var menuPanel = MenuPanel();
+        var statusPanel = StatusPanel();
         var body = new Layout("Body").SplitColumns(
-            new Layout("Menu", MenuPanel()).Ratio(3),
-            new Layout("Status", StatusPanel()).Ratio(2)
+            new Layout("Menu", menuPanel).Ratio(3),
+            new Layout("Status", statusPanel).Ratio(2)
         );
 
-        var latestVersion = GetLatestVersion();
-        var newVersionText =
-            latestVersion == _currentVersion
-                ? string.Empty
-                : $"  [green]A newer version is available: {latestVersion}[/]";
-        var footer = new Markup(
-            $"[grey]{ThisAssembly.AssemblyInformationalVersion} · github.com/ziofil/pitwall · a fork of undercut-f1 by Aman Dhoot · unofficial, not associated with Formula 1[/]{newVersionText}"
-        ).Centered();
+        // The version, the update notice when there is one, then the credits that fit
+        var update = NewerVersion() is { } newer
+            ? $"[green]Pitwall {Markup.Escape(newer)} is out: github.com/ziofil/pitwall/releases[/]"
+            : null;
+        string[] credits =
+        [
+            $"v{ThisAssembly.NuGetPackageVersion}",
+            .. update is null ? new[] { "github.com/ziofil/pitwall" } : [],
+            "a fork of undercut-f1 by Aman Dhoot",
+            "unofficial, not associated with Formula 1",
+        ];
 
-        // Size the panels to the menu (entries, a blank line, the detail line and the border),
-        // leaving any spare height as space below
-        var bodyHeight = Math.Max(menu.Items.Count + 4, 13);
-        var layout = new Layout("Main").SplitRows(
-            new Layout("Logo", logo).Size(Logo.Length + 3),
-            new Layout("Gap", new Text("")).Size(1),
-            new Layout("Body", body).Size(bodyHeight),
-            new Layout("Footer", footer).Size(1),
-            new Layout("Spare", new Text(""))
+        var content = new Responsive(
+            (width, height) =>
+            {
+                // Size the panels to their content at this width (the status wraps more on
+                // narrow screens), leaving any spare height as space below. On short terminals
+                // the logo gives way to a one-line title so the panels keep their height
+                var menuWidth = width * 3 / 5;
+                var bodyHeight = Math.Max(
+                    Lines(menuPanel, menuWidth),
+                    Lines(statusPanel, width - menuWidth)
+                );
+                var footerParts = new List<string>();
+                foreach (var part in credits)
+                {
+                    var candidate = footerParts.Append(part).Prepend(update ?? "");
+                    if (Markup.Remove(string.Join(" · ", candidate)).Length > width - 2)
+                        break;
+                    footerParts.Add(part);
+                }
+                var footer = new Markup(
+                    string.Join(
+                        "[grey] · [/]",
+                        footerParts
+                            .Select(x => $"[grey]{Markup.Escape(x)}[/]")
+                            .Prepend(update ?? "")
+                            .Where(x => x.Length > 0)
+                    )
+                ).Centered();
+
+                var compact = height is { } rows && rows < Logo.Length + 3 + bodyHeight + 2;
+                var title = compact
+                    ? (IRenderable)
+                        new Markup(
+                            "[bold #e10600]PITWALL[/] [grey]·[/] [bold white]THE TEAM VIEW OF LIVE F1 TIMING[/]"
+                        ).Centered()
+                    : logo;
+                return new Layout("Main").SplitRows(
+                    new Layout("Logo", title).Size(compact ? 1 : Logo.Length + 3),
+                    new Layout("Gap", new Text("")).Size(1),
+                    new Layout("Body", body).Size(bodyHeight),
+                    new Layout("Footer", footer).Size(1),
+                    new Layout("Spare", new Text(""))
+                );
+            }
         );
 
-        return Task.FromResult<IRenderable>(layout);
+        return Task.FromResult<IRenderable>(content);
     }
 
     private IRenderable MenuPanel()
@@ -106,56 +145,75 @@ public class MainDisplay(
 
     private IRenderable StatusPanel()
     {
-        var rows = new List<IRenderable>();
+        // Labels in their own column, so values that wrap stay lined up
+        var grid = new Grid().AddColumn(new GridColumn { Width = 7, NoWrap = true }).AddColumn();
+        void Row(string label, string value) =>
+            grid.AddRow(new Markup($"[grey]{label}[/]"), new Markup(value));
 
         if (menu.SessionRunning)
         {
-            var session = $"{sessionInfo.Latest.Meeting?.Name} · {sessionInfo.Latest.Name}";
-            rows.Add(new Markup($"[grey]SESSION[/]  [bold]{Markup.Escape(session)}[/]"));
-            rows.Add(new Markup("[grey]         restart Pitwall to watch a different session[/]"));
+            var session = string.Join(
+                " · ",
+                new[] { sessionInfo.Latest.Meeting?.Name, sessionInfo.Latest.Name }.Where(x =>
+                    !string.IsNullOrWhiteSpace(x)
+                )
+            );
+            Row(
+                "SESSION",
+                (session.Length == 0 ? "[bold]starting…[/]" : $"[bold]{Markup.Escape(session)}[/]")
+                    + "\n[grey]restart Pitwall to watch a different session[/]"
+            );
         }
         else
         {
-            rows.Add(new Markup("[grey]SESSION[/]  none running yet"));
+            Row("SESSION", "none running yet");
         }
 
-        var team = context.Team;
-        rows.Add(
+        // The pit wall follows the leading team until another is picked
+        var team = menu.SessionRunning ? context.Team : null;
+        Row(
+            "TEAM",
             team is null
-                ? new Markup("[grey]TEAM   [/]  none selected")
-                : new Markup(
-                    $"[grey]TEAM   [/]  [{PitWallTheme.TeamColour(team.Colour).ToMarkup()}]■[/] [bold]{Markup.Escape(team.Name)}[/]"
-                )
+                ? "[grey]leading team · ▲ ▼ to change[/]"
+                : $"[{PitWallTheme.TeamColour(team.Colour).ToMarkup()}]■[/] [bold]{Markup.Escape(team.Name)}[/]"
         );
 
-        rows.Add(
+        Row(
+            "F1 TV",
             accountService.IsAuthenticated switch
             {
-                Formula1Account.AuthenticationResult.Success => new Markup(
-                    $"[grey]F1 TV  [/]  [green]logged in[/] [grey]until {accountService.Payload!.Expiry:yyyy-MM-dd}[/]"
-                ),
-                Formula1Account.AuthenticationResult.ExpiredToken => new Markup(
-                    "[grey]F1 TV  [/]  [yellow]login expired[/] [grey]· see F1 TV account[/]"
-                ),
-                _ => new Markup(
-                    "[grey]F1 TV  [/]  [yellow]not logged in[/] [grey](needed for live telemetry)[/]"
-                ),
+                Formula1Account.AuthenticationResult.Success =>
+                    $"[green]logged in[/] [grey]until {accountService.Payload!.Expiry:yyyy-MM-dd}[/]",
+                Formula1Account.AuthenticationResult.ExpiredToken =>
+                    "[yellow]login expired[/] [grey]· see F1 TV account[/]",
+                _ =>
+                    "[yellow]not logged in[/] [grey](needed for live telemetry)[/]",
             }
         );
 
-        rows.Add(new Text(""));
-        rows.Add(
-            new Markup(
-                """
-                [grey]On the pit wall[/]
-                [white]◄ ►[/]  [grey]change page[/]
-                [white]▲ ▼[/]  [grey]change team (also Tab / Shift+Tab)[/]
-                [white]Enter[/] [grey]pick from the team list[/]
-                [white]Esc[/]   [grey]back to this menu[/]
-                [white]N M[/]   [grey]stream delay · [/][white]P[/] [grey]pause[/]
-                """
-            )
-        );
+        var keys = new Grid().AddColumn(new GridColumn { Width = 5, NoWrap = true }).AddColumn();
+        foreach (
+            var (key, action) in new[]
+            {
+                ("◄ ►", "change page (or 1–6)"),
+                ("▲ ▼", "change team (also Tab)"),
+                ("Enter", "pick from the team list"),
+                ("Esc", "back to this menu"),
+                ("D", "stream delay"),
+                ("P", "pause the clock"),
+            }
+        )
+        {
+            keys.AddRow(new Markup($"[white]{key}[/]"), new Markup($"[grey]{action}[/]"));
+        }
+
+        var rows = new List<IRenderable>
+        {
+            grid,
+            new Text(""),
+            new Markup("[grey]On the pit wall[/]"),
+            keys,
+        };
 
         return new Panel(new Rows(rows))
         {
@@ -169,21 +227,35 @@ public class MainDisplay(
     private static string Chequer(int width) =>
         string.Concat(Enumerable.Range(0, width).Select(i => i % 2 == 0 ? "▀" : "▄"));
 
-    private string GetLatestVersion()
+    /// <summary>
+    /// The latest release on GitHub if it's newer than this one, else <c>null</c>. Fetched in the
+    /// background, so this is <c>null</c> until the answer is in (or if it can't be fetched).
+    /// </summary>
+    private string? NewerVersion()
     {
-        // We don't want to block anything when fetching the latest version from GitHub
-        // So we trigger a background task to fetch, and return the current version until we have a result available.
-        switch (_fetchVersionTask)
-        {
-            case null:
-                _fetchVersionTask = Task.Run(GetLatestVersionAsync);
-                return _currentVersion;
-            case { IsCompletedSuccessfully: true }:
-                return _fetchVersionTask.Result ?? _currentVersion;
-            default:
-                return _currentVersion;
-        }
+        _fetchVersionTask ??= Task.Run(GetLatestVersionAsync);
+        return
+            _fetchVersionTask is { IsCompletedSuccessfully: true, Result: { } latest }
+            && Version.TryParse(latest.TrimStart('v'), out var latestVersion)
+            && Version.TryParse(ThisAssembly.NuGetPackageVersion, out var current)
+            && latestVersion > current
+            ? latest
+            : null;
     }
+
+    /// <summary>How many lines a renderable takes at a width.</summary>
+    private static int Lines(IRenderable renderable, int width) =>
+        Segment
+            .SplitLines(
+                renderable.Render(
+                    new RenderOptions(
+                        AnsiConsole.Console.Profile.Capabilities,
+                        new Size(width, 1000)
+                    ),
+                    width
+                )
+            )
+            .Count;
 
     private async Task<string?> GetLatestVersionAsync()
     {

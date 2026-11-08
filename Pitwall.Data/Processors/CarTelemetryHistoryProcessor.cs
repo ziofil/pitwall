@@ -44,9 +44,18 @@ public sealed class CarTelemetryHistoryProcessor(
     // Samples further apart than this are treated as a gap in the feed, not integrated across.
     private static readonly TimeSpan MaxSampleGap = TimeSpan.FromSeconds(2);
 
+    // The live values are fitted through this many samples nearest the moment shown
+    private const int FitPoints = 4;
+
+    // Recent samples kept for the live values: comfortably more than the render delay covers
+    private const int RecentCapacity = 48;
+
     private sealed class DriverState
     {
         public readonly List<TelemetryLap> Completed = [];
+
+        // The newest samples with their feed time and lap, across lap boundaries
+        public readonly List<(DateTimeOffset Utc, int Lap, TelemetrySample Sample)> Recent = [];
         public List<TelemetrySample> Current = [];
         public int CurrentLap;
         public DateTimeOffset LapStartUtc;
@@ -56,33 +65,13 @@ public sealed class CarTelemetryHistoryProcessor(
 
     private readonly ConcurrentDictionary<string, DriverState> _drivers = new();
 
-    private static readonly TimeSpan Blend = TimeSpan.FromSeconds(0.3);
-
-    // Continuous versions of the analogue channels, for the live readouts. Car data arrives in
-    // batches about once a second; this interpolates between the samples.
-    private readonly SignalSmoother _speed = new(
-        TimeSpan.FromSeconds(3),
-        TimeSpan.FromSeconds(0.5),
-        resetThreshold: 120,
-        blend: Blend
-    );
-    private readonly SignalSmoother _rpm = new(
-        TimeSpan.FromSeconds(3),
-        TimeSpan.FromSeconds(0.5),
-        resetThreshold: 6000,
-        blend: Blend
-    );
-    private readonly SignalSmoother _throttle = new(
-        TimeSpan.FromSeconds(3),
-        TimeSpan.FromSeconds(0.5),
-        resetThreshold: 100,
-        blend: Blend
-    );
-    private readonly SignalSmoother _distance = new(
-        TimeSpan.FromSeconds(3),
-        TimeSpan.FromSeconds(1),
-        resetThreshold: 500,
-        blend: Blend
+    // Feed time to show the live values at. Not the session clock minus a lag: live, the samples
+    // arrive a varying 2-3s late, so that would run past the newest sample and stutter. Car data
+    // arrives in batches about once a second; the live values are interpolated between samples
+    private readonly RenderCursor _cursor = new(
+        dateTimeProvider,
+        TimingSmoother.RenderLag,
+        TimeSpan.FromSeconds(5)
     );
 
     public CarDataPoint Latest { get; private set; } = new();
@@ -90,6 +79,8 @@ public sealed class CarTelemetryHistoryProcessor(
     public void Process(CarDataPoint data)
     {
         Latest = data;
+        if (data.Entries.Count > 0)
+            _cursor.Observe(data.Entries.Max(x => x.Utc));
         foreach (var entry in data.Entries.OrderBy(x => x.Utc))
         {
             foreach (var (driverNumber, car) in entry.Cars)
@@ -104,48 +95,70 @@ public sealed class CarTelemetryHistoryProcessor(
     }
 
     /// <summary>
-    /// The car's telemetry as it was <see cref="TimingSmoother.RenderLag"/> ago on the session
-    /// clock: speed, RPM, throttle and lap distance interpolated between samples, gear, brake and
-    /// DRS from the sample at that moment.
+    /// The car's telemetry a moment behind the newest sample (see <see cref="RenderCursor"/>):
+    /// speed, RPM, throttle and lap distance fitted through the samples nearest that moment, so
+    /// they move smoothly despite the feed's uneven sample times; gear, brake and DRS from the
+    /// sample at that moment.
     /// </summary>
     public bool TryGetLive(string driverNumber, out TelemetrySample sample)
     {
         sample = default;
         if (!_drivers.TryGetValue(driverNumber, out var state))
             return false;
-
-        var at = dateTimeProvider.Utc - TimingSmoother.RenderLag;
-        TelemetrySample? exact = null;
-        lock (state)
-        {
-            // The newest sample at or before the moment shown, for the step channels
-            for (var i = state.Current.Count - 1; i >= 0; i--)
-            {
-                if (state.LapStartUtc + state.Current[i].Elapsed <= at)
-                {
-                    exact = state.Current[i];
-                    break;
-                }
-            }
-            exact ??= state.Current.Count > 0 ? state.Current[0] : null;
-        }
-        if (exact is not { } step)
+        if (_cursor.Advance() is not { } at)
             return false;
+
+        (DateTimeOffset Utc, int Lap, TelemetrySample Sample)[] recent;
+        lock (state)
+            recent = [.. state.Recent];
+        if (recent.Length == 0)
+            return false;
+
+        // The newest sample at or before the moment shown, for the step channels; the fit only
+        // uses samples from the same lap, as distance starts again from zero each lap
+        var index = Math.Max(0, Array.FindLastIndex(recent, x => x.Utc <= at));
+        var (_, lap, step) = recent[index];
+        var nearest = recent
+            .Where(x => x.Lap == lap)
+            .OrderBy(x => (x.Utc - at).Duration())
+            .Take(FitPoints)
+            .ToArray();
+        double Fit(Func<TelemetrySample, double> value) => FitAt(nearest, at, value);
 
         sample = step with
         {
-            Speed = _speed.TryGet(driverNumber, at, out var speed)
-                ? (int)Math.Round(speed)
-                : step.Speed,
-            Rpm = _rpm.TryGet(driverNumber, at, out var rpm) ? (int)Math.Round(rpm) : step.Rpm,
-            Throttle = _throttle.TryGet(driverNumber, at, out var throttle)
-                ? (int)Math.Clamp(Math.Round(throttle), 0, 100)
-                : step.Throttle,
-            Distance = _distance.TryGet(driverNumber, at, out var distance)
-                ? Math.Max(0, distance)
-                : step.Distance,
+            Speed = (int)Math.Round(Fit(x => x.Speed)),
+            Rpm = (int)Math.Round(Fit(x => x.Rpm)),
+            Throttle = (int)Math.Clamp(Math.Round(Fit(x => x.Throttle)), 0, 100),
+            Distance = Math.Max(0, Fit(x => x.Distance)),
         };
         return true;
+    }
+
+    /// <summary>A straight line fitted through the samples, evaluated at the given time.</summary>
+    private static double FitAt(
+        (DateTimeOffset Utc, int Lap, TelemetrySample Sample)[] samples,
+        DateTimeOffset at,
+        Func<TelemetrySample, double> value
+    )
+    {
+        // Time measured from the moment shown, so the line's intercept is the value then
+        double n = samples.Length,
+            st = 0,
+            st2 = 0,
+            sv = 0,
+            stv = 0;
+        foreach (var (utc, _, sample) in samples)
+        {
+            var t = (utc - at).TotalSeconds;
+            var v = value(sample);
+            (st, st2, sv, stv) = (st + t, st2 + (t * t), sv + v, stv + (t * v));
+        }
+        var denominator = (n * st2) - (st * st);
+        if (Math.Abs(denominator) < 1e-9)
+            return sv / n;
+        var slope = ((n * stv) - (st * sv)) / denominator;
+        return (sv - (slope * st)) / n;
     }
 
     /// <summary>
@@ -208,21 +221,19 @@ public sealed class CarTelemetryHistoryProcessor(
         }
 
         state.LastUtc = utc;
-        _speed.Add(driverNumber, utc, channels.Speed ?? 0);
-        _rpm.Add(driverNumber, utc, channels.Rpm ?? 0);
-        _throttle.Add(driverNumber, utc, Math.Clamp(channels.Throttle ?? 0, 0, 100));
-        _distance.Add(driverNumber, utc, state.Distance);
-        state.Current.Add(
-            new TelemetrySample(
-                Distance: state.Distance,
-                Elapsed: utc - state.LapStartUtc,
-                Speed: channels.Speed ?? 0,
-                Rpm: channels.Rpm ?? 0,
-                Gear: channels.Ngear ?? 0,
-                Throttle: Math.Clamp(channels.Throttle ?? 0, 0, 100),
-                Brake: channels.Brake ?? 0,
-                DrsOpen: channels.Drs is 10 or 12 or 14
-            )
+        var sample = new TelemetrySample(
+            Distance: state.Distance,
+            Elapsed: utc - state.LapStartUtc,
+            Speed: channels.Speed ?? 0,
+            Rpm: channels.Rpm ?? 0,
+            Gear: channels.Ngear ?? 0,
+            Throttle: Math.Clamp(channels.Throttle ?? 0, 0, 100),
+            Brake: channels.Brake ?? 0,
+            DrsOpen: channels.Drs is 10 or 12 or 14
         );
+        state.Current.Add(sample);
+        state.Recent.Add((utc, lap, sample));
+        if (state.Recent.Count > RecentCapacity)
+            state.Recent.RemoveAt(0);
     }
 }

@@ -28,10 +28,13 @@ public sealed class PitWallTimingDisplay(
     private const string Purple = "#cc33ff";
     private const string Yellow = "#ffff33";
 
-    // Below this width the team panels would squeeze the table, so only the table is shown
-    private const int SidePanelMinWidth = 140;
+    // Table widths (columns plus their padding) that the best lap and tyre columns need, and
+    // that full driver names need; narrower than that, drivers are shown by their three letters
+    private const int ExtraColumnsMinWidth = 114;
+    private const int FullNamesMinWidth = 96;
     private const int SidePanelWidth = 46;
-    private const int ExtraColumnsMinWidth = 120;
+    // The team panels only come in when the table beside them keeps its extra columns
+    private const int SidePanelMinWidth = SidePanelWidth + ExtraColumnsMinWidth;
 
     public Screen Screen => Screen.PitWallTiming;
 
@@ -46,16 +49,23 @@ public sealed class PitWallTimingDisplay(
 
         var content = new Responsive(width =>
         {
-            // Best lap and tyre columns only when the table has room for them
-            var table = isRace ? RaceTable(wide: width >= ExtraColumnsMinWidth) : PracticeTable();
+            // Best lap and tyre columns only when the table has room for them, and mini sectors
+            // after those
+            var tableWidth = width < SidePanelMinWidth ? width : width - SidePanelWidth;
+            var shortNames = tableWidth < FullNamesMinWidth;
+            var table = isRace
+                ? RaceTable(wide: tableWidth >= ExtraColumnsMinWidth, tableWidth, shortNames)
+                : PracticeTable(tableWidth, shortNames);
+            // Race control fills whatever height the table leaves
+            var left = new Layout("Left").SplitRows(
+                new Layout("Table", table).Size(tableRows),
+                new Layout("Gap", new Text("")).Size(1),
+                new Layout("RaceControl", RaceControlPanel())
+            );
             return width < SidePanelMinWidth
-                ? table
+                ? left
                 : new Layout("Wide").SplitColumns(
-                    new Layout("Left").SplitRows(
-                        new Layout("Table", table).Size(tableRows),
-                        new Layout("Gap", new Text("")).Size(1),
-                        new Layout("RaceControl", RaceControlPanel())
-                    ),
+                    left,
                     new Layout("Team", TeamPanels()).Size(SidePanelWidth)
                 );
         });
@@ -67,18 +77,18 @@ public sealed class PitWallTimingDisplay(
         return Task.FromResult(components.Page(Screen, body));
     }
 
-    private IRenderable RaceTable(bool wide)
+    private IRenderable RaceTable(bool wide, int available, bool shortNames)
     {
         var lines = timingData.Latest.GetOrderedLines();
         if (lines.Count == 0)
             return new Text("NO TIMING AVAILABLE", PitWallTheme.Dim);
 
         var best = SessionBestSectors();
-        (string, int, Justify, string)[] columns =
+        List<(string Header, int Width, Justify Alignment, string Best)> columns =
         [
             ("POS", 4, Justify.Right, ""),
             ("NO", 4, Justify.Right, ""),
-            ("DRIVER", 18, Justify.Left, ""),
+            ("DRIVER", shortNames ? 6 : 18, Justify.Left, ""),
             ("GAP", 9, Justify.Right, ""),
             ("INT", 8, Justify.Right, ""),
             ("LAST LAP", 10, Justify.Right, ""),
@@ -94,7 +104,8 @@ public sealed class PitWallTimingDisplay(
                 : Array.Empty<(string, int, Justify, string)>(),
             ("LAPS", 5, Justify.Right, ""),
         ];
-        var table = NewTable(columns);
+        var segments = MiniSectors(columns, available);
+        var table = NewTable([.. columns]);
 
         var fastestLap = lines
             .Values.Select(x => x.BestLapTime.ToTimeSpan())
@@ -125,7 +136,7 @@ public sealed class PitWallTimingDisplay(
             [
                 Position(number, line),
                 Number(number, line),
-                Name(number, retired),
+                Name(number, retired, shortNames),
                 new Text(
                     retired ? "STOP" : gap ?? "",
                     retired ? PitWallTheme.Dim : PitWallTheme.Normal
@@ -136,9 +147,9 @@ public sealed class PitWallTimingDisplay(
                     PitWallTheme.TimeStyle(line.LastLapTime, improvedOnly: true)
                 ),
                 .. wide ? [BestLap(line, fastestLap)] : Array.Empty<IRenderable>(),
-                Sector(line, "0"),
-                Sector(line, "1"),
-                Sector(line, "2"),
+                Sector(line, 0, segments),
+                Sector(line, 1, segments),
+                Sector(line, 2, segments),
                 Pit(line),
                 .. wide ? [Tyre(number)] : Array.Empty<IRenderable>(),
                 new Text($"{line.NumberOfLaps}", PitWallTheme.Normal),
@@ -148,7 +159,7 @@ public sealed class PitWallTimingDisplay(
         return table;
     }
 
-    private IRenderable PracticeTable()
+    private IRenderable PracticeTable(int available, bool shortNames)
     {
         var lines = timingData.Latest.GetOrderedLines();
         if (lines.Count == 0)
@@ -156,17 +167,20 @@ public sealed class PitWallTimingDisplay(
 
         var best = SessionBestSectors();
         var leaderBest = lines.Values.FirstOrDefault()?.BestLapTime.ToTimeSpan();
-        var table = NewTable(
+        List<(string Header, int Width, Justify Alignment, string Best)> columns =
+        [
             ("POS", 4, Justify.Right, ""),
             ("NO", 4, Justify.Right, ""),
-            ("DRIVER", 18, Justify.Left, ""),
+            ("DRIVER", shortNames ? 6 : 18, Justify.Left, ""),
             ("BEST LAP", 10, Justify.Right, ""),
             ("GAP", 8, Justify.Right, ""),
             ("S1", 7, Justify.Right, best[0]),
             ("S2", 7, Justify.Right, best[1]),
             ("S3", 7, Justify.Right, best[2]),
-            ("LAPS", 5, Justify.Right, "")
-        );
+            ("LAPS", 5, Justify.Right, ""),
+        ];
+        var segments = MiniSectors(columns, available);
+        var table = NewTable([.. columns]);
 
         foreach (var (number, line) in lines)
         {
@@ -180,12 +194,12 @@ public sealed class PitWallTimingDisplay(
             table.AddRow(
                 Position(number, line),
                 Number(number, line, knockedOut),
-                Name(number, knockedOut),
+                Name(number, knockedOut, shortNames),
                 new Text(line.BestLapTime?.Value ?? "", PitWallTheme.Normal),
                 new Text(gap, PitWallTheme.Normal),
-                Sector(line, "0"),
-                Sector(line, "1"),
-                Sector(line, "2"),
+                Sector(line, 0, segments),
+                Sector(line, 1, segments),
+                Sector(line, 2, segments),
                 new Text($"{line.NumberOfLaps}", PitWallTheme.Normal)
             );
         }
@@ -233,10 +247,10 @@ public sealed class PitWallTimingDisplay(
         return new Markup($"[bold {colour}]{number}[/]");
     }
 
-    private IRenderable Name(string number, bool dimmed)
+    private IRenderable Name(string number, bool dimmed, bool shortName)
     {
         var driver = context.Driver(number);
-        var name = Markup.Escape(FormatName(driver));
+        var name = Markup.Escape(shortName ? driver.Tla ?? number : FormatName(driver));
         var style =
             dimmed ? "#8899bb"
             : context.IsTeamCar(number)
@@ -255,11 +269,73 @@ public sealed class PitWallTimingDisplay(
             : broadcast.ToUpperInvariant();
     }
 
-    private static IRenderable Sector(TimingDataPoint.Driver line, string sector)
+    /// <summary>
+    /// How many mini sectors each sector has, if the table has room to show them; widens the
+    /// sector columns to fit them. <c>null</c> when they aren't shown.
+    /// </summary>
+    private int[]? MiniSectors(
+        List<(string Header, int Width, Justify Alignment, string Best)> columns,
+        int available
+    )
     {
-        var time = line.Sectors.GetValueOrDefault(sector);
-        return new Text(ShortSector(time?.Value), PitWallTheme.TimeStyle(time));
+        // Not every car has reached every mini sector, so count the most any car has
+        var counts = Enumerable
+            .Range(0, 3)
+            .Select(sector =>
+                timingData
+                    .Latest.Lines.Values.Select(line =>
+                        line.Sectors.GetValueOrDefault($"{sector}")
+                            ?.Segments.Keys.DefaultIfEmpty(-1)
+                            .Max() + 1
+                        ?? 0
+                    )
+                    .DefaultIfEmpty(0)
+                    .Max()
+            )
+            .ToArray();
+
+        // Each column also has a space of padding; the bars take one more for the gap after them
+        var width = columns.Sum(x => x.Width + 1) + counts.Sum(x => x + 1);
+        if (counts.Sum() == 0 || width > available)
+            return null;
+
+        for (var sector = 0; sector < 3; sector++)
+        {
+            var index = columns.FindIndex(x => x.Header == $"S{sector + 1}");
+            columns[index] = columns[index] with
+            {
+                Width = columns[index].Width + counts[sector] + 1,
+            };
+        }
+        return counts;
     }
+
+    private static IRenderable Sector(TimingDataPoint.Driver line, int sector, int[]? segments)
+    {
+        var time = line.Sectors.GetValueOrDefault($"{sector}");
+        var text = new Text(ShortSector(time?.Value), PitWallTheme.TimeStyle(time));
+        if (segments is null)
+            return text;
+
+        // One bar per mini sector, coloured as the car went through it, then the sector time
+        var bars = string.Concat(
+            Enumerable
+                .Range(0, segments[sector])
+                .Select(i => $"[{SegmentColour(time?.Segments.GetValueOrDefault(i)?.Status)}]█[/]")
+        );
+        var timeText = ShortSector(time?.Value).PadLeft(7);
+        return new Markup($"{bars} [{PitWallTheme.TimeStyle(time).ToMarkup()}]{timeText}[/]");
+    }
+
+    private static string SegmentColour(TimingDataPoint.Driver.StatusFlags? status) =>
+        status switch
+        {
+            null or 0 => "#333338",
+            { } s when s.HasFlag(TimingDataPoint.Driver.StatusFlags.PitLane) => "#2f7fff",
+            { } s when s.HasFlag(TimingDataPoint.Driver.StatusFlags.OverallBest) => Purple,
+            { } s when s.HasFlag(TimingDataPoint.Driver.StatusFlags.PersonalBest) => "#00dc00",
+            _ => Yellow,
+        };
 
     // The monitor shows sector times to one decimal place
     private static string ShortSector(string? value) =>
@@ -369,9 +445,9 @@ public sealed class PitWallTimingDisplay(
                     snapshot.LastLapTime?.Value ?? "",
                     PitWallTheme.TimeStyle(snapshot.LastLapTime, improvedOnly: true)
                 ),
-                Sector(snapshot, "0"),
-                Sector(snapshot, "1"),
-                Sector(snapshot, "2")
+                Sector(snapshot, 0, null),
+                Sector(snapshot, 1, null),
+                Sector(snapshot, 2, null)
             );
         }
 

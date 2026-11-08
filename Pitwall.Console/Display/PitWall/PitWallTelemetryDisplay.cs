@@ -17,12 +17,13 @@ public sealed class PitWallTelemetryDisplay(
     CarDataProcessor carData,
     CarTelemetryHistoryProcessor telemetry,
     TimingStatsProcessor timingStats,
+    Formula1Account account,
     ITerminalImages images
 ) : IDisplay
 {
     // Rows of each car's column above and below the trace strips: title bar and legend, and
     // the distance axis; plus the status bar under the columns
-    private const int RowsAboveStrips = 6;
+    private const int RowsAboveStrips = 5;
     private const int RowsBelowStrips = 2;
     private const int LabelColumns = 11;
 
@@ -52,7 +53,7 @@ public sealed class PitWallTelemetryDisplay(
     public Screen Screen => Screen.PitWallTelemetry;
 
     // Speed, throttle, brake and so on drawn as images: weights set how much height each gets
-    private static readonly TelemetryChannel[] ImageChannels =
+    private static readonly TelemetryChannel[] AllImageChannels =
     [
         .. Channels.Select(channel => new TelemetryChannel(
             channel.Name,
@@ -69,6 +70,16 @@ public sealed class PitWallTelemetryDisplay(
             }
         )),
     ];
+
+    /// <summary>
+    /// Whether the feed has a DRS channel: cars from 2026 have no DRS, and the channel is gone.
+    /// </summary>
+    private bool HasDrs =>
+        carData.Latest.Entries.LastOrDefault()?.Cars.Values.Any(x => x.Channels.Drs is not null)
+        ?? true;
+
+    private IEnumerable<int> ShownChannels() =>
+        Enumerable.Range(0, Channels.Length).Where(i => HasDrs || Channels[i].Name != "DRS");
 
     // Smoothed values glide between feed updates, so redraw quickly to show the motion; when
     // drawing the traces as an image, its cost sets the pace
@@ -97,6 +108,7 @@ public sealed class PitWallTelemetryDisplay(
                 .Select(x => new TelemetryCar(x.Current, x.Previous))
                 .ToList();
             var (columns, rows) = _image.WindowCells;
+            var imageChannels = ShownChannels().Select(i => AllImageChannels[i]).ToList();
             _image.Update(
                 PitWallComponents.HeaderHeight + RowsAboveStrips,
                 0,
@@ -105,7 +117,7 @@ public sealed class PitWallTelemetryDisplay(
                 (width, height) =>
                     ChartRenderers.Telemetry(
                         cars,
-                        ImageChannels,
+                        imageChannels,
                         width,
                         height,
                         LabelColumns * width / (float)columns
@@ -122,20 +134,34 @@ public sealed class PitWallTelemetryDisplay(
                 team.DriverNumbers.Select(number => new Layout(number, CarWaveform(number)))
                     .ToArray()
             )
-            : new Markup(
-                """
-                [yellow]No car telemetry received yet.[/]
-
-                Live car telemetry requires an F1 TV subscription. Log in with [bold]pitwall login[/] to receive it.
-                Recorded and imported sessions include telemetry once a few seconds have been replayed.
-                """
-            );
+            : new Markup(NoTelemetryMessage());
 
         var layout = new Layout("Telemetry").SplitRows(
             new Layout("Body", body),
             new Layout("Status", StatusLine()).Size(1)
         );
         return Task.FromResult(components.Page(Screen, layout));
+    }
+
+    /// <summary>
+    /// Why there's no telemetry yet. Recordings (and the demo) carry their own car data, so a
+    /// login only matters for live sessions, and only while not logged in.
+    /// </summary>
+    private string NoTelemetryMessage()
+    {
+        var loggedIn = account.IsAuthenticated == Formula1Account.AuthenticationResult.Success;
+        return loggedIn
+            ? """
+                [yellow]No car telemetry received yet.[/]
+
+                It appears as soon as the session sends car data. Recordings joined part-way through can take a minute or two to include it.
+                """
+            : """
+                [yellow]No car telemetry received yet.[/]
+
+                Recordings and the demo include it once their car data starts, usually within a minute or two.
+                For live sessions, car telemetry needs an F1 TV subscription: log in with [bold]pitwall login[/].
+                """;
     }
 
     /// <summary>The lap in progress, drawn up to the car's interpolated position, and the lap before.</summary>
@@ -167,9 +193,9 @@ public sealed class PitWallTelemetryDisplay(
         var teamHex = PitWallTheme.TeamColour(driver.TeamColour).ToHex();
 
         var title = new SingleLine(
-            $"[white] [#{teamHex}]■[/] Waveform · {driver.RacingNumber} {driver.Tla} · Lap {current?.Lap}"
+            $"[white] [#{teamHex}]■[/] {driver.RacingNumber} {driver.Tla} · Lap {current?.Lap} at {current?.Distance ?? 0:0} m"
                 + (previous is null ? "" : $" [grey]vs Lap {previous.Lap}[/]")
-                + $" · {current?.Distance ?? 0:0} m[/]",
+                + "[/]",
             TitleBar
         );
 
@@ -178,7 +204,8 @@ public sealed class PitWallTelemetryDisplay(
         if (lapLength < 100)
             lapLength = 100;
 
-        var strips = Channels
+        var strips = ShownChannels()
+            .Select(i => Channels[i])
             .Select(channel =>
                 new Layout(channel.Name)
                     .SplitColumns(
@@ -222,7 +249,9 @@ public sealed class PitWallTelemetryDisplay(
                                     );
                                 }
                             })
-                        )
+                        ),
+                        // A gap so this car's traces don't run into the next car's labels
+                        new Layout("Gap", new Text("")).Size(1)
                     )
                     // Speed gets the most room, on/off channels the least
                     .Ratio(
@@ -255,7 +284,10 @@ public sealed class PitWallTelemetryDisplay(
     private static IRenderable ChannelLabel(string name, string unit, Color colour) =>
         new Markup($"[bold {colour.ToMarkup()}]{name}[/]\n[grey]{unit}[/]");
 
-    /// <summary>A Name | Value | Unit table of the latest live values, like the ATLAS legend.</summary>
+    /// <summary>
+    /// The latest live values, like the ATLAS legend: channel, value and unit, three to a row,
+    /// with short channel names when the column is narrow.
+    /// </summary>
     private IRenderable Legend(string number)
     {
         // Live values interpolated between samples; DRS eligibility only exists in the raw data
@@ -264,61 +296,54 @@ public sealed class PitWallTelemetryDisplay(
             .Latest.Entries.LastOrDefault()
             ?.Cars.GetValueOrDefault(number)
             ?.Channels;
-        var cells = new[]
+        var cells = new List<(string Name, string Short, string Value, string Unit, string Colour)>
         {
-            ("vCar", hasLive ? $"{live.Speed}" : "", "kph"),
-            ("nEngine", hasLive ? $"{live.Rpm}" : "", "rpm"),
-            ("NGear", hasLive ? $"{live.Gear}" : "", ""),
-            ("rThrottle", hasLive ? $"{live.Throttle}" : "", "%"),
-            ("pBrake", hasLive && live.Brake > 0 ? "ON" : "OFF", ""),
-            (
-                "DRS",
-                hasLive && live.DrsOpen ? "OPEN"
-                : channels?.Drs is 8 ? "ELIG"
-                : "SHUT",
-                ""
-            ),
+            ("vCar", "SPD", hasLive ? $"{live.Speed}" : "–", "kph", "#3399ff"),
+            ("nEngine", "RPM", hasLive ? $"{live.Rpm}" : "–", "rpm", "#dc50ff"),
+            ("NGear", "GEAR", hasLive ? (live.Gear == 0 ? "N" : $"{live.Gear}") : "–", "", "#ffe600"),
+            ("rThrottle", "THR", hasLive ? $"{live.Throttle}" : "–", "%", "#00dc00"),
+            ("pBrake", "BRK", hasLive && live.Brake > 0 ? "ON" : "OFF", "", "#ff2828"),
         };
+        if (HasDrs)
+        {
+            cells.Add(
+                (
+                    "DRS",
+                    "DRS",
+                    hasLive && live.DrsOpen ? "OPEN"
+                        : channels?.Drs is 8 ? "ELIG"
+                        : "SHUT",
+                    "",
+                    "#00c8e6"
+                )
+            );
+        }
 
-        var table = new Table().NoBorder().NoSafeBorder().HideHeaders();
-        for (var i = 0; i < 3; i++)
+        return new Responsive(width =>
         {
-            table.AddColumn(new TableColumn("") { Width = 10, Padding = new Padding(0, 0, 1, 0) });
-            table.AddColumn(
-                new TableColumn("")
-                {
-                    Width = 6,
-                    Alignment = Justify.Right,
-                    Padding = new Padding(0, 0, 1, 0),
-                }
-            );
-            table.AddColumn(new TableColumn("") { Width = 4, Padding = new Padding(0, 0, 2, 0) });
-        }
-        foreach (var row in cells.Chunk(3))
-        {
-            table.AddRow(
-                row.SelectMany(cell =>
-                        new IRenderable[]
-                        {
-                            new Text(cell.Item1, new Style(foreground: new Color(51, 153, 255))),
-                            new Text(
-                                cell.Item2,
-                                new Style(foreground: Color.White, decoration: Decoration.Bold)
-                            ),
-                            new Text(cell.Item3, PitWallTheme.Dim),
-                        }
+            // Full names need 21 columns a cell; short ones 13
+            var full = width >= 3 * 21;
+            var lines = cells
+                .Chunk(3)
+                .Select(row =>
+                    string.Concat(
+                        row.Select(x =>
+                            full
+                                ? $"[{x.Colour}]{x.Name,-9}[/] [bold white]{x.Value,6}[/] [grey]{x.Unit,-3}[/]  "
+                                : $"[{x.Colour}]{x.Short,-4}[/][bold white]{x.Value,5}[/][grey]{x.Unit,-3}[/] "
+                        )
                     )
-                    .ToArray()
-            );
-        }
-        return new Rows(new Markup("[grey]Name       Value  Unit[/]"), table, SpeedTraps(number));
+                )
+                .Select(x => (IRenderable)new SingleLine(x));
+            return new Rows([.. lines, SpeedTraps(number, full)]);
+        });
     }
 
     /// <summary>
     /// The car's best speeds through the speed trap (ST), the two intermediates (I1, I2) and the
     /// finish line (FL) this session, with its rank among all cars.
     /// </summary>
-    private IRenderable SpeedTraps(string number)
+    private IRenderable SpeedTraps(string number, bool full)
     {
         var speeds = timingStats.Latest.Lines.GetValueOrDefault(number)?.BestSpeeds ?? [];
         var traps = new[] { "ST", "I1", "I2", "FL" }
@@ -331,12 +356,14 @@ public sealed class PitWallTelemetryDisplay(
                     rank == 1 ? "#cc33ff"
                     : rank <= 3 ? "#00dc00"
                     : "white";
-                return $"[#3399ff]{x.Trap}[/] [bold {colour}]{x.Speed.Value}[/][grey] kph P{rank}[/]";
+                return full
+                    ? $"[#3399ff]{x.Trap}[/] [bold {colour}]{x.Speed.Value}[/][grey] kph P{rank}[/]"
+                    : $"[#3399ff]{x.Trap}[/] [bold {colour}]{x.Speed.Value}[/][grey] P{rank}[/]";
             })
             .ToList();
         return new SingleLine(
-            "[grey]Best speeds [/] "
-                + (traps.Count == 0 ? "[grey]none yet[/]" : string.Join("   ", traps))
+            (full ? "[grey]Best speeds [/] " : "[grey]Best [/]")
+                + (traps.Count == 0 ? "[grey]none yet[/]" : string.Join(full ? "   " : "  ", traps))
         );
     }
 

@@ -15,4 +15,5 @@ public enum Screen
     PitWallTelemetry,
     PitWallTrackMap,
     PitWallComms,
+    PitWallWeather,
 }

@@ -73,10 +73,8 @@ public class TimingService(
             }
             else
             {
-                // No items in the queue to read. Instead of immediately checking,
-                // throttle a bit to ensure we aren't wasting CPU time
-                await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken)
-                    .ConfigureAwait(false);
+                // Wait for the next item, and process it as soon as it arrives
+                await _workItems.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false);
             }
         }
     }

@@ -65,6 +65,27 @@ public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<Samp
     }
 
     [Fact]
+    public async Task DelayBoxReplacesTheTabsWhileTyping()
+    {
+        var state = fixture.Services.GetRequiredService<State>();
+        state.TextInput = new TextInput(
+            "34600",
+            _ => Task.FromResult<string?>(null),
+            DelayInputHandler.Title
+        );
+        try
+        {
+            var text = await RenderAsync<PitWallTimingDisplay>();
+            Assert.Contains("LIVE DELAY  34600▏  ms", text);
+            Assert.DoesNotContain("2 STRATEGY", text);
+        }
+        finally
+        {
+            state.TextInput = null;
+        }
+    }
+
+    [Fact]
     public async Task CommsPageOffersTheTranscriptionModelWhenMissing()
     {
         var text = await RenderAsync<PitWallCommsDisplay>(width: 200);
@@ -126,12 +147,44 @@ public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<Samp
     {
         var text = await RenderAsync<PitWallTelemetryDisplay>();
 
-        Assert.Contains("Waveform · 44 HAM", text);
-        Assert.Contains("Waveform · 63 RUS", text);
+        Assert.Contains("44 HAM · Lap", text);
+        Assert.Contains("63 RUS · Lap", text);
         Assert.Contains("vCar", text);
         Assert.Contains("Best speeds", text);
         Assert.Contains("kph P", text);
         Assert.Contains("nEngine", text);
+    }
+
+    [Fact]
+    public async Task WeatherPageShowsConditionsHistoryAndTyres()
+    {
+        var text = await RenderAsync<PitWallWeatherDisplay>();
+
+        Assert.Contains("WEATHER", text);
+        Assert.Contains("TRACK", text);
+        Assert.Contains("HUMIDITY", text);
+        Assert.Contains("WIND", text);
+        Assert.Contains("━ track", text);
+        // A replay isn't live, so there's no forecast for it
+        Assert.Contains("Live sessions only", text);
+        Assert.Contains("ON TRACK", text);
+        Assert.Contains("HAM", text);
+    }
+
+    [Fact]
+    public void RadarImageRendersWithoutRadarData()
+    {
+        using var image = RadarRenderer.Render(
+            new RadarScene(null, null, "RADAR 14:20", 3, 6, "Loading radar…", null),
+            900,
+            900
+        );
+        Assert.Equal(900, image.Width);
+
+        var directory = Path.Join(AppContext.BaseDirectory, "renders");
+        Directory.CreateDirectory(directory);
+        using var data = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
+        File.WriteAllBytes(Path.Join(directory, "RadarImage.png"), data.ToArray());
     }
 
     [Fact]
@@ -244,7 +297,9 @@ public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<Samp
         var text = await RenderAsync<PitWallTimingDisplay>(width: width, height: 30);
         var lines = text.Split('\n');
         var header = lines.First(x => x.Contains("POS"));
-        var hamilton = lines.First(x => x.Contains("HAMILTON"));
+        // Narrow tables show drivers by their three letters
+        var name = width < 96 ? "HAM" : "L. HAMILTON";
+        var hamilton = lines.First(x => x.Contains($" 44 {name}"));
 
         // Each value ends in the same column as its right-aligned header
         foreach (var column in new[] { "LAPS", "PIT" })
@@ -257,7 +312,7 @@ public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<Samp
         }
         Assert.Equal(
             header.IndexOf("DRIVER", StringComparison.Ordinal),
-            hamilton.IndexOf("L. HAMILTON", StringComparison.Ordinal)
+            hamilton.IndexOf(name, StringComparison.Ordinal)
         );
     }
 
@@ -273,6 +328,7 @@ public class PitWallDisplayTests(SampleRaceFixture fixture) : IClassFixture<Samp
                 () => RenderAsync<PitWallTelemetryDisplay>(width: 80, height: 24),
                 () => RenderAsync<PitWallTrackMapDisplay>(width: 80, height: 24),
                 () => RenderAsync<PitWallCommsDisplay>(width: 80, height: 24),
+                () => RenderAsync<PitWallWeatherDisplay>(width: 80, height: 24),
             }
         )
         {

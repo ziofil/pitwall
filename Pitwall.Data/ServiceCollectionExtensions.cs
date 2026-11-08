@@ -27,6 +27,7 @@ public static partial class ServiceCollectionExtensions
             .AddSingleton<INotifyService, NotifyService>()
             .AddSingleton<ITranscriptionProvider, TranscriptionProvider>()
             .AddSingleton<Formula1Account>()
+            .AddSingleton<SessionSchedule>()
             .AddSingleton<IDataImporter, DataImporter>();
 
         // For F1's own endpoints only: it carries the F1 account token

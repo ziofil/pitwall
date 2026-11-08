@@ -27,10 +27,11 @@ Every page follows the team you picked, and its two cars are marked in the team 
 | | Page | What's on it |
 | --- | --- | --- |
 | `1` | **Timing** | A faithful copy of the official timing monitor: positions, gaps and intervals, last laps, sector times in purple (session best), green (personal best) and yellow, the session-best sectors under the headers, and the clocks in yellow along the bottom. |
-| `2` | **Strategy** | A race trace: how many seconds each car is ahead of or behind the leader's average pace, lap by lap, with the team's cars and their nearest rivals highlighted. Rising lines are lapping faster than that pace, a step down is a pit stop, and the distance between two lines is the gap between those cars. For each car: tyre and stint age, pace and degradation per lap, the gaps ahead and behind with their trend, where it would rejoin if it pitted now, rivals within undercut range, and its pit stops. |
+| `2` | **Strategy** | A race trace: how many seconds each car is ahead of or behind a car lapping at the field's median pace, plotted at every sector, with every car in its team colour (each team's second car dashed) and the team's cars and their nearest rivals highlighted. Rising lines are lapping faster than the field, a sharp drop is a pit stop (marked with a dot in the new tyre's colour), and the distance between two lines is the gap between those cars. Safety cars, virtual safety cars and red flags are shaded. For each car: tyre and stint age, pace and degradation per lap, the gaps ahead and behind with their trend, where it would rejoin if it pitted now, rivals within undercut range, and its pit stops. |
 | `3` | **Telemetry** | Waveform traces for both cars against lap distance (speed, throttle, brake, gear, RPM and DRS), the current lap drawn over the previous one, with live values and the best speeds through each speed trap. |
 | `4` | **Track** | A lap ring showing where every car is around the lap, with the latest race control messages inside it, next to the circuit map. Drawn as a real image in terminals that support inline graphics (iTerm2, Kitty, WezTerm, Ghostty and others), and with text characters everywhere else. |
 | `5` | **Comms** | Race control messages coloured by type, with the ones about the team marked, next to the team's radio. Every radio message is transcribed automatically, on your machine, and any of them can be played. |
+| `6` | **Weather** | Track and air temperature, humidity, pressure, wind and rain now, with their change over the last 15 minutes and a chart of the session so far. In live sessions, the rain forecast at the circuit for the next 3 hours ([Open-Meteo](https://open-meteo.com)) and an animated rain radar around it ([RainViewer](https://www.rainviewer.com), map © [CARTO](https://carto.com) © OpenStreetMap). For strategy: which tyres the field is on, the team's tyres, and whether the last laps on wet tyres are faster than on slicks. |
 
 All screenshots are from the 2026 Mexico City Grand Prix, lap 56 of 71, following Red Bull Racing.
 
@@ -54,7 +55,7 @@ A few things worth knowing:
 
 - **Smooth numbers.** The feed updates gaps every few seconds and car positions about once a second. Pitwall buffers the updates, fits a curve through them and redraws at about 15 frames a second, so cars glide and gaps count smoothly instead of jumping. Real jumps, like a pit stop, still show as jumps.
 - **Pit loss.** The strategy page starts from the circuit's typical pit loss, switches to the time actually lost in this session's stops once there are some (comparing in- and out-laps with cars that stayed out on the same laps, so it still works when conditions change), and uses the much smaller safety car and VSC values when one is out.
-- **Delay.** TV broadcasts run 30 to 60 seconds behind the live feed. Add a delay with <kbd>N</kbd>/<kbd>M</kbd> so the pit wall matches your TV and doesn't spoil anything; the header shows it, highlighted while you change it.
+- **Delay.** TV broadcasts run 30 to 60 seconds behind the live feed. Press <kbd>D</kbd> and type a delay so the pit wall matches your TV and doesn't spoil anything: milliseconds (`34600`), seconds (`34.6s`) or minutes and seconds (`0:34.6`), then <kbd>Enter</kbd>. The header shows it, highlighted for a moment after you change it.
 
 ## Install
 
@@ -105,10 +106,10 @@ The keys for the current screen are always shown along the bottom.
 | Keys | What they do |
 | --- | --- |
 | <kbd>▲</kbd> <kbd>▼</kbd> and <kbd>Enter</kbd> | Move through menus and lists, and choose |
-| <kbd>◄</kbd> <kbd>►</kbd>, <kbd>1</kbd>–<kbd>5</kbd> | Change pit wall page |
+| <kbd>◄</kbd> <kbd>►</kbd>, <kbd>1</kbd>–<kbd>6</kbd> | Change pit wall page |
 | <kbd>▲</kbd> <kbd>▼</kbd>, <kbd>Tab</kbd> / <kbd>⇧ Shift</kbd>+<kbd>Tab</kbd> | Next or previous team on the pit wall (on Comms the arrows pick radio messages, so use <kbd>Tab</kbd>) |
 | <kbd>Enter</kbd> | On the pit wall, open the team list; on Comms, play the selected radio message |
-| <kbd>N</kbd> / <kbd>M</kbd> | Less / more stream delay, by 5 seconds (30 with <kbd>⇧ Shift</kbd>); <kbd>,</kbd> / <kbd>.</kbd> change it by 1 second |
+| <kbd>D</kbd> | Type the stream delay (<kbd>Enter</kbd> applies, <kbd>Esc</kbd> cancels, `0` removes it) |
 | <kbd>P</kbd> | Pause or resume the session clock, e.g. to line up a replay with a recorded broadcast |
 | <kbd>Esc</kbd> or <kbd>Backspace</kbd> | Back |
 | <kbd>Ctrl</kbd>+<kbd>C</kbd> | Back, or quit from the menu |

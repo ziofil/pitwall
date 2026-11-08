@@ -13,6 +13,7 @@ public sealed class ChangeTeamInputHandler(State state, PitWallContext context) 
         Screen.PitWallStrategy,
         Screen.PitWallTelemetry,
         Screen.PitWallTrackMap,
+        Screen.PitWallWeather,
     ];
 
     public bool IsEnabled => true;

@@ -20,7 +20,8 @@ public sealed class SettingsDisplay(State state, SettingsStore store) : IDisplay
 
         var table = new Table().NoBorder().NoSafeBorder().HideHeaders().Expand();
         table.AddColumn(new TableColumn("") { Width = 26, NoWrap = true });
-        table.AddColumn(new TableColumn("") { NoWrap = true });
+        // The value wraps rather than the label, so labels keep their column on narrow screens
+        table.AddColumn(new TableColumn(""));
 
         foreach (var setting in settings)
         {

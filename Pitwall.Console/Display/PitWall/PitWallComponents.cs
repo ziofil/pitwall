@@ -29,6 +29,7 @@ public sealed class PitWallComponents(
         (Screen.PitWallTelemetry, "TELEMETRY"),
         (Screen.PitWallTrackMap, "TRACK"),
         (Screen.PitWallComms, "COMMS"),
+        (Screen.PitWallWeather, "WEATHER"),
     ];
 
     public const int HeaderHeight = 2;
@@ -90,18 +91,24 @@ public sealed class PitWallComponents(
         var session =
             $"{sessionInfo.Latest.Meeting?.Circuit?.ShortName} {sessionInfo.Latest.Name}".Trim();
 
-        var top = new[]
+        // Each item with the order it's dropped in when the line doesn't fit (0: never)
+        var top = new (string Markup, int Drop)[]
         {
-            $"[#{teamHex} on #{teamHex}]▌[/][bold #{teamHex}] {Markup.Escape(team?.Name.ToUpperInvariant() ?? "NO TEAM")} [/]",
-            cars,
-            Markup.Escape(session.ToUpperInvariant()),
-            lapText,
-            TrackStatusMarkup(),
-            $@"{localTime:HH\:mm\:ss}",
-            $@"REM {extrapolatedClock.ExtrapolatedRemaining():hh\:mm\:ss}",
-            DelayMarkup(),
-            weatherText,
-        };
+            (
+                $"[#{teamHex} on #{teamHex}]▌[/][bold #{teamHex}] {Markup.Escape(team?.Name.ToUpperInvariant() ?? "NO TEAM")} [/]",
+                0
+            ),
+            (cars, 0),
+            (Markup.Escape(session.ToUpperInvariant()), 3),
+            (lapText, 0),
+            (TrackStatusMarkup(), 0),
+            ($@"{localTime:HH\:mm\:ss}", 2),
+            ($@"REM {extrapolatedClock.ExtrapolatedRemaining():h\:mm\:ss}", 4),
+            (DelayMarkup(), 0),
+            (weatherText, 1),
+        }
+            .Where(x => !string.IsNullOrWhiteSpace(x.Markup))
+            .ToList();
 
         // Second line: page tabs and the team colour rule
         var tabs = string.Join(
@@ -114,10 +121,31 @@ public sealed class PitWallComponents(
             )
         );
 
+        // While the delay is being typed, its box takes the place of the tabs
+        if (state.TextInput is { Title: DelayInputHandler.Title } input)
+        {
+            var error = input.Error is null
+                ? "[grey]ms, or 34.6s, or 0:34.6 · 0 for none[/]"
+                : $"[#ff3333]{Markup.Escape(input.Error)}[/]";
+            tabs =
+                $"[bold #{teamHex}] {DelayInputHandler.Title} [/][black on white] {Markup.Escape(input.Text)}▏ [/] [grey]ms[/]   {error}";
+        }
+
         return new Rows(
-            new SingleLine(
-                string.Join("[grey] │ [/]", top.Where(x => !string.IsNullOrWhiteSpace(x)))
-            ),
+            new Responsive(width =>
+            {
+                const string separator = "[grey] │ [/]";
+                var shown = top.ToList();
+                int Length() =>
+                    shown.Sum(x => Markup.Remove(x.Markup).Length) + (3 * (shown.Count - 1));
+                foreach (var drop in top.Where(x => x.Drop > 0).OrderBy(x => x.Drop))
+                {
+                    if (Length() <= width)
+                        break;
+                    shown.Remove(drop);
+                }
+                return new SingleLine(string.Join(separator, shown.Select(x => x.Markup)));
+            }),
             new SingleLine(tabs)
         );
     }

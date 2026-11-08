@@ -26,9 +26,12 @@ public sealed class SampleMexicoFixture() : SampleSessionFixture("2026_Mexico_Ci
 public sealed class SampleQualifyingFixture()
     : SampleSessionFixture("2024_Imola_Qualifying", int.MaxValue);
 
+/// <summary>Pitwall just launched: no session started, no data.</summary>
+public sealed class NoSessionFixture() : SampleSessionFixture(null, 0);
+
 /// <summary>
 /// Replays a recorded session from the repository's sample data up to a set lap, so displays can
-/// be rendered against real timing data.
+/// be rendered against real timing data. With no session, nothing is replayed.
 /// </summary>
 public abstract class SampleSessionFixture
 {
@@ -37,7 +40,7 @@ public abstract class SampleSessionFixture
     /// <summary>Whether the circuit outline could be downloaded for the track page.</summary>
     public bool HasCircuitMap { get; }
 
-    protected SampleSessionFixture(string session, int replayToLap)
+    protected SampleSessionFixture(string? session, int replayToLap)
     {
         // An empty data directory, so tests never find a downloaded Whisper model and start
         // transcribing (which would download radio audio)
@@ -67,9 +70,14 @@ public abstract class SampleSessionFixture
             .AddSingleton<PitWallStrategyDisplay>()
             .AddSingleton<PitWallTelemetryDisplay>()
             .AddSingleton<PitWallTrackMapDisplay>()
-            .AddSingleton<PitWallCommsDisplay>();
+            .AddSingleton<PitWallCommsDisplay>()
+            .AddSingleton<RainRadar>()
+            .AddSingleton<RainForecast>()
+            .AddSingleton<PitWallWeatherDisplay>();
         Services = services.BuildServiceProvider();
 
+        if (session is null)
+            return;
         var lapCount = Services.GetRequiredService<LapCountProcessor>();
         SessionReplay.Replay(
             Services,
